@@ -1247,9 +1247,26 @@ function processRows(rows, type) {
         const secs = parseFloat(row['Duration in seconds']);
         const stage = (row['Sleep stage']||'').toLowerCase();
         if (!isNaN(secs)) {
-          if (!HEALTH.sleep[key]) HEALTH.sleep[key] = {total:0,deep:0,light:0,rem:0,awake:0};
-          HEALTH.sleep[key].total += secs/3600;
-          if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[key][stage] += secs/3600;
+          // Use session start date: if time is before noon, assign to previous day
+          // (sleep starting 10pm Jun 4 and ending 6am Jun 5 → all under Jun 4)
+          const dt = new Date(row['Date'].replace(/\./g, '-').replace(' ', 'T'));
+          const hour = dt.getHours();
+          let sleepKey = key;
+          if (hour < 12) {
+            // After midnight — belongs to previous night
+            const prev = new Date(dt);
+            prev.setDate(prev.getDate() - 1);
+            sleepKey = prev.toISOString().slice(0,10);
+          }
+          // Deduplicate by timestamp + stage
+          const sleepSig = row['Date'] + '|' + row['Time'] + '|' + stage + '|' + secs;
+          if (!HEALTH._sleepSeen) HEALTH._sleepSeen = new Set();
+          if (HEALTH._sleepSeen.has(sleepSig)) return;
+          HEALTH._sleepSeen.add(sleepSig);
+
+          if (!HEALTH.sleep[sleepKey]) HEALTH.sleep[sleepKey] = {total:0,deep:0,light:0,rem:0,awake:0};
+          HEALTH.sleep[sleepKey].total += secs/3600;
+          if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[sleepKey][stage] += secs/3600;
         }
 
       } else if (type === 'energy') {
