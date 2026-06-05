@@ -1268,29 +1268,29 @@ function processRows(rows, type) {
         if (!isNaN(val)) { HEALTH.steps[key] = (HEALTH.steps[key]||0) + val; }
 
       } else if (type === 'sleep') {
-        // Only use first session — stop when timestamps go backwards (2nd source starts)
         const secs = parseFloat(row['Duration in seconds']);
         const stage = (row['Sleep stage']||'').toLowerCase();
         if (!isNaN(secs)) {
           const dt = new Date(row['Date'].replace(/\./g, '-').replace(' ', 'T'));
-          // Detect backward timestamp jump = second session starting, stop processing
+          // Stop at backward timestamp = start of duplicate session from 2nd source
           if (!HEALTH._lastSleepDt) HEALTH._lastSleepDt = dt;
-          if (dt < HEALTH._lastSleepDt) return; // second session — skip
+          if (dt < HEALTH._lastSleepDt) return;
           HEALTH._lastSleepDt = dt;
-          // Deduplicate by timestamp
+          // Deduplicate by timestamp only
           const sleepTs = row['Date'] + '|' + row['Time'];
           if (!HEALTH._sleepSeen) HEALTH._sleepSeen = new Set();
           if (HEALTH._sleepSeen.has(sleepTs)) return;
           HEALTH._sleepSeen.add(sleepTs);
-          // Group midnight segments under previous day
+          // Group midnight segments under previous night's date
           const hour = dt.getHours();
           let sleepKey = key;
-          if (hour < 12) {
+          if (hour < 14) {
             const prev = new Date(dt);
             prev.setDate(prev.getDate() - 1);
             sleepKey = prev.toISOString().slice(0,10);
           }
-          if (!HEALTH.sleep[sleepKey]) HEALTH.sleep[sleepKey] = {total:0,deep:0,light:0,rem:0,awake:0};
+          if (!HEALTH.sleep[sleepKey]) HEALTH.sleep[sleepKey] = {total:0,deep:0,light:0,rem:0,awake:0,_raw:[]};
+          HEALTH.sleep[sleepKey]._raw.push({stage, secs});
           HEALTH.sleep[sleepKey].total += secs/3600;
           if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[sleepKey][stage] += secs/3600;
         }
@@ -1305,7 +1305,6 @@ function processRows(rows, type) {
 }
 
 function finaliseHealth() {
-  // Average arrays
   Object.keys(HEALTH.hrv).forEach(k => {
     if (Array.isArray(HEALTH.hrv[k])) HEALTH.hrv[k] = +(HEALTH.hrv[k].reduce((s,v)=>s+v,0)/HEALTH.hrv[k].length).toFixed(1);
   });
@@ -1313,7 +1312,11 @@ function finaliseHealth() {
     if (Array.isArray(HEALTH.spo2[k])) HEALTH.spo2[k] = +(HEALTH.spo2[k].reduce((s,v)=>s+v,0)/HEALTH.spo2[k].length).toFixed(1);
   });
   Object.keys(HEALTH.sleep).forEach(k => {
-    Object.keys(HEALTH.sleep[k]).forEach(s => HEALTH.sleep[k][s] = +HEALTH.sleep[k][s].toFixed(2));
+    const s = HEALTH.sleep[k];
+    // Total sleep = total minus awake (matches Oura "time asleep" not "time in bed")
+    s.total = +Math.max(0, s.total - (s.awake||0)).toFixed(2);
+    ['deep','light','rem','awake'].forEach(stage => { if(s[stage]) s[stage] = +s[stage].toFixed(2); });
+    delete s._raw;
   });
   Object.keys(HEALTH.steps).forEach(k => HEALTH.steps[k] = Math.round(HEALTH.steps[k]));
 }
@@ -1329,121 +1332,54 @@ function getFileType(name) {
   return null;
 }
 
-// ── Oura API fetcher ─────────────────────────────────────────
+// Oura API deprecated personal tokens — using CSV data instead
 async function fetchOuraData() {
-  const today = new Date().toISOString().slice(0,10);
-  const start = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
-  const headers = { 'Authorization': `Bearer ${OURA_TOKEN}` };
-
-  try {
-    // Sleep
-    setText('Fetching Oura sleep data...');
-    const sleepRes = await fetch(`https://api.ouraring.com/v2/usercollection/sleep?start_date=${start}&end_date=${today}`, {headers});
-    if (sleepRes.ok) {
-      const sleepData = await sleepRes.json();
-      (sleepData.data || []).forEach(s => {
-        if (s.type === 'deleted') return;
-        const key = s.day;
-        HEALTH.sleep[key] = {
-          total: +(((s.total_sleep_duration||0)/3600).toFixed(2)),
-          deep:  +(((s.deep_sleep_duration||0)/3600).toFixed(2)),
-          light: +(((s.light_sleep_duration||0)/3600).toFixed(2)),
-          rem:   +(((s.rem_sleep_duration||0)/3600).toFixed(2)),
-          awake: +(((s.awake_time||0)/3600).toFixed(2)),
-          efficiency: s.efficiency || null,
-        };
-      });
-    }
-
-    // Daily readiness (includes HRV, RHR)
-    setText('Fetching Oura readiness data...');
-    const readRes = await fetch(`https://api.ouraring.com/v2/usercollection/daily_readiness?start_date=${start}&end_date=${today}`, {headers});
-    if (readRes.ok) {
-      const readData = await readRes.json();
-      (readData.data || []).forEach(r => {
-        const key = r.day;
-        if (r.contributors?.resting_heart_rate) HEALTH.rhr[key] = r.contributors.resting_heart_rate;
-        if (r.contributors?.hrv_balance) HEALTH.hrv[key] = r.contributors.hrv_balance;
-      });
-    }
-
-    // Daily activity (steps, calories)
-    setText('Fetching Oura activity data...');
-    const actRes = await fetch(`https://api.ouraring.com/v2/usercollection/daily_activity?start_date=${start}&end_date=${today}`, {headers});
-    if (actRes.ok) {
-      const actData = await actRes.json();
-      (actData.data || []).forEach(a => {
-        const key = a.day;
-        if (a.steps) HEALTH.steps[key] = a.steps;
-        if (a.active_calories) HEALTH.energy[key] = {active: a.active_calories, total: a.total_calories||0};
-      });
-    }
-
-    // SPO2
-    setText('Fetching Oura SpO2 data...');
-    const spo2Res = await fetch(`https://api.ouraring.com/v2/usercollection/daily_spo2?start_date=${start}&end_date=${today}`, {headers});
-    if (spo2Res.ok) {
-      const spo2Data = await spo2Res.json();
-      (spo2Data.data || []).forEach(s => {
-        if (s.spo2_percentage?.average) HEALTH.spo2[s.day] = +s.spo2_percentage.average.toFixed(1);
-      });
-    }
-
-    // Heart rate (for RHR trend)
-    setText('Fetching Oura heart rate data...');
-    const hrRes = await fetch(`https://api.ouraring.com/v2/usercollection/heartrate?start_datetime=${start}T00:00:00&end_datetime=${today}T23:59:59`, {headers});
-    if (hrRes.ok) {
-      const hrData = await hrRes.json();
-      const dayMin = {};
-      (hrData.data || []).forEach(h => {
-        const key = h.timestamp.slice(0,10);
-        if (h.source === 'rest' || h.source === 'sleep') {
-          if (!dayMin[key] || h.bpm < dayMin[key]) dayMin[key] = h.bpm;
-        }
-      });
-      // Only fill RHR where we don't already have it from readiness
-      Object.entries(dayMin).forEach(([k,v]) => { if (!HEALTH.rhr[k]) HEALTH.rhr[k] = v; });
-    }
-
-  } catch(e) {
-    console.warn('Oura API error:', e);
-  }
+  // No-op: Oura personal access tokens deprecated Dec 2025
+  // Data comes from Google Drive CSVs
 }
 
 async function fetchAllHealthData() {
-  // Fetch from Oura API (primary source - accurate)
-  await fetchOuraData();
-
-  // Also fetch steps from Google Drive as fallback for Huawei steps
-  setText('Fetching steps from Google Drive...');
+  setText('Fetching health data from Google Drive...');
   const allFolderIds = Object.values(GDRIVE_FOLDERS);
   const allFiles = [];
+
   for (const fid of allFolderIds) {
     try {
       const files = await listFolder(fid);
-      allFiles.push(...files.filter(f => getFileType(f.name) === 'steps'));
-    } catch(e) {}
+      allFiles.push(...files);
+    } catch(e) { console.warn('Folder fetch failed:', fid, e); }
   }
+
+  // Deduplicate by name, keep latest
   const seen = {};
   allFiles.forEach(f => { if (!seen[f.name] || f.modifiedTime > seen[f.name].modifiedTime) seen[f.name] = f; });
-  const stepsFiles = Object.values(seen).sort((a,b) => b.modifiedTime.localeCompare(a.modifiedTime)).slice(0,3);
-  for (const file of stepsFiles) {
+  const uniqueFiles = Object.values(seen);
+
+  // Group by type, keep 3 most recent per type
+  const byType = {};
+  uniqueFiles.forEach(f => {
+    const type = getFileType(f.name);
+    if (!type) return;
+    if (!byType[type]) byType[type] = [];
+    byType[type].push(f);
+  });
+  const filesToFetch = [];
+  Object.values(byType).forEach(files => {
+    files.sort((a,b) => b.modifiedTime.localeCompare(a.modifiedTime));
+    filesToFetch.push(...files.slice(0, 3));
+  });
+
+  setText(`Processing ${filesToFetch.length} health files...`);
+
+  for (const file of filesToFetch) {
+    const type = getFileType(file.name);
+    if (!type) continue;
     try {
       const csv = await fetchCSV(file.id);
       const rows = parseCSVText(csv);
-      // Only add steps where Oura didn't provide them
-      rows.forEach(row => {
-        const key = toDateKey(row['Date']);
-        if (!key || HEALTH.steps[key]) return;
-        const source = (row['Source']||'').trim();
-        if (source && !TRUSTED_SOURCES.steps.includes(source)) return;
-        const sig = row['Date']+'|'+row['Time']+'|'+row['Steps'];
-        if (seenSteps.has(sig)) return;
-        seenSteps.add(sig);
-        const val = parseFloat(row['Steps']);
-        if (!isNaN(val)) HEALTH.steps[key] = (HEALTH.steps[key]||0) + val;
-      });
-    } catch(e) {}
+      if (type === 'sleep') { HEALTH._lastSleepDt = null; HEALTH._sleepSeen = new Set(); }
+      processRows(rows, type);
+    } catch(e) { console.warn('File fetch failed:', file.name, e); }
   }
 
   finaliseHealth();
