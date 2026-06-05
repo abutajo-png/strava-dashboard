@@ -1,0 +1,2672 @@
+<!DOCTYPE html>
+<!-- saved from url=(0060)file:///C:/Users/Osama/OneDrive/Desktop/Downloads/index.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Osama · Strava Dashboard</title>
+<link href="./index_files/css2" rel="stylesheet">
+<script src="./index_files/chart.umd.js.download"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #080810;
+  --surface: #10101a;
+  --surface2: #181824;
+  --surface3: #1e1e2e;
+  --border: rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.11);
+  --text: #ededf0;
+  --muted: #6e6e82;
+  --muted2: #9898ae;
+  --accent: #fc4c02;
+  --accent-dim: rgba(252,76,2,0.15);
+  --green: #3dd68c;
+  --green-dim: rgba(61,214,140,0.12);
+  --blue: #5b9cf6;
+  --blue-dim: rgba(91,156,246,0.12);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.12);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.12);
+  --red: #f87171;
+  --red-dim: rgba(248,113,113,0.12);
+  --font-head: 'Outfit', sans-serif;
+  --font-mono: 'Inter', sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--font-mono); min-height: 100vh; }
+
+/* LOADING */
+#loading-screen {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 100vh; gap: 20px;
+}
+.loader-logo { font-family: var(--font-head); font-size: 36px; font-weight: 800; color: var(--accent); letter-spacing: -1px; }
+.loader-logo span { color: var(--text); }
+.spinner { width: 36px; height: 36px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading-text { color: var(--muted); font-size: 13px; letter-spacing: 0.04em; }
+#error-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
+#error-screen h2 { font-family: var(--font-head); font-size: 20px; color: var(--red); }
+#error-screen p { color: var(--muted); font-size: 13px; }
+
+/* LAYOUT */
+#dashboard { display: none; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.25rem 2rem; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg); z-index: 10;
+  flex-wrap: wrap; gap: 12px;
+}
+.topbar-logo { font-family: var(--font-head); font-size: 18px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+.athlete-pill {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 100px; padding: 6px 14px 6px 6px;
+}
+.athlete-pill img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
+.athlete-pill-name { font-size: 13px; font-weight: 500; }
+.athlete-pill-meta { font-size: 11px; color: var(--muted); }
+#last-updated { font-size: 11px; color: var(--muted); }
+
+.main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+
+/* NAV TABS */
+.nav-tabs { display: flex; gap: 4px; margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0; flex-wrap: wrap; }
+.nav-tab {
+  background: none; border: none; color: var(--muted); font-family: var(--font-mono); font-size: 12px;
+  letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 16px 10px; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s;
+}
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* CARDS */
+.metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+.metric-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.25rem; position: relative; overflow: hidden;
+}
+.metric-card::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--c, var(--accent));
+}
+.metric-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.metric-value { font-family: var(--font-head); font-size: 26px; font-weight: 800; letter-spacing: -1px; }
+.metric-unit { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-left: 3px; }
+.metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 16px; }
+.card-title { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 1.25rem; }
+.card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 680px) { .card-row { grid-template-columns: 1fr; } }
+.card-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 780px) { .card-row-3 { grid-template-columns: 1fr; } }
+
+/* INSIGHTS */
+.insights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+.insight-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem;
+  border-left: 3px solid var(--ic, var(--accent));
+}
+.insight-icon { font-size: 20px; margin-bottom: 8px; }
+.insight-title { font-family: var(--font-head); font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.insight-body { font-size: 12px; color: var(--muted2); line-height: 1.6; }
+.insight-value { font-family: var(--font-head); font-size: 20px; font-weight: 800; color: var(--ic, var(--accent)); }
+
+/* HR ZONES */
+.zone-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+.zone-label { width: 70px; color: var(--muted); flex-shrink: 0; }
+.zone-bar-bg { flex: 1; height: 8px; background: var(--surface3); border-radius: 4px; overflow: hidden; }
+.zone-bar { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+.zone-count { width: 40px; text-align: right; color: var(--muted2); }
+
+/* TABLE */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { padding: 8px 12px; text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 400; white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+
+.badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 500; white-space: nowrap; }
+.b-run { background: var(--green-dim); color: var(--green); }
+.b-weight { background: var(--purple-dim); color: var(--purple); }
+.b-crossfit { background: var(--accent-dim); color: var(--accent); }
+.b-ride { background: var(--blue-dim); color: var(--blue); }
+.b-workout { background: var(--amber-dim); color: var(--amber); }
+.b-other { background: rgba(110,110,130,0.12); color: var(--muted2); }
+
+.filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.fbtn { background: transparent; border: 1px solid var(--border2); border-radius: 6px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; padding: 4px 10px; cursor: pointer; transition: all 0.15s; }
+.fbtn:hover, .fbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* PACE */
+.pace-bar-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+.pace-name { width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted2); font-size: 11px; }
+.pace-bar-bg { flex: 1; height: 6px; background: var(--surface3); border-radius: 3px; }
+.pace-bar { height: 100%; border-radius: 3px; background: var(--green); }
+.pace-val { width: 55px; text-align: right; color: var(--text); font-size: 11px; }
+
+/* LOAD */
+.load-week { display: flex; align-items: flex-end; gap: 6px; height: 80px; margin-bottom: 8px; }
+.load-bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+.load-bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--accent); opacity: 0.7; min-height: 2px; transition: height 0.5s ease; }
+.load-bar-label { font-size: 9px; color: var(--muted); }
+
+/* LEGEND */
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+.ldot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+
+/* SUFFER */
+.suffer-pill { display: inline-block; min-width: 34px; text-align: center; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+.s-lo { background: var(--green-dim); color: var(--green); }
+.s-mi { background: var(--amber-dim); color: var(--amber); }
+.s-hi { background: var(--accent-dim); color: var(--accent); }
+.s-ex { background: var(--red-dim); color: var(--red); }
+
+.trend-up { color: var(--green); font-size: 11px; }
+.trend-dn { color: var(--red); font-size: 11px; }
+.trend-eq { color: var(--muted); font-size: 11px; }
+
+/* COACHING */
+.race-banner {
+  background: linear-gradient(135deg, rgba(252,76,2,0.18) 0%, rgba(252,76,2,0.05) 100%);
+  border: 1px solid rgba(252,76,2,0.35);
+  border-radius: 14px; padding: 1.5rem 2rem; margin-bottom: 1.5rem;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+}
+.race-banner-title { font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+.race-banner-sub { font-size: 13px; color: var(--muted2); margin-top: 4px; }
+.countdown-days { font-family: 'Outfit', sans-serif; font-size: 48px; font-weight: 800; color: var(--accent); letter-spacing: -2px; line-height: 1; }
+.countdown-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.phase-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+
+.advice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+.advice-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--ac, var(--accent));
+  border-radius: 12px; padding: 1.25rem;
+}
+.advice-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.advice-icon { font-size: 22px; }
+.advice-title { font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600; }
+.advice-priority { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.p-high { background: var(--accent-dim); color: var(--accent); }
+.p-med { background: var(--amber-dim); color: var(--amber); }
+.p-low { background: var(--green-dim); color: var(--green); }
+.advice-body { font-size: 13px; color: var(--muted2); line-height: 1.7; }
+.advice-body strong { color: var(--text); font-weight: 600; }
+
+.week-plan { display: grid; grid-template-columns: repeat(7,1fr); gap: 6px; margin-top: 8px; }
+.day-cell { border-radius: 8px; padding: 8px 4px; text-align: center; background: var(--surface2); border: 1px solid var(--border); }
+.day-cell.today { border-color: var(--accent); background: rgba(252,76,2,0.08); }
+.day-cell.race-day { border-color: var(--amber); background: rgba(245,158,11,0.1); }
+.day-name { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.day-type { font-size: 10px; font-weight: 600; }
+.day-detail { font-size: 9px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+
+.stat-compare { display: flex; gap: 8px; margin-top: 10px; }
+.stat-compare-item { flex: 1; background: var(--surface2); border-radius: 8px; padding: 10px; text-align: center; }
+.stat-compare-val { font-family: 'Outfit', sans-serif; font-size: 18px; font-weight: 700; }
+.stat-compare-label { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+.progress-bar-wrap { margin: 8px 0; }
+.progress-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted2); margin-bottom: 4px; }
+.progress-bg { height: 8px; background: var(--surface3); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+</style>
+<style id="_goober"> .go1475592160{height:0;}.go1671063245{height:auto;}.go1888806478{display:flex;flex-wrap:wrap;flex-grow:1;}@media (min-width:600px){.go1888806478{flex-grow:initial;min-width:288px;}}.go167266335{background-color:#313131;font-size:0.875rem;line-height:1.43;letter-spacing:0.01071em;color:#fff;align-items:center;padding:6px 16px;border-radius:4px;box-shadow:0px 3px 5px -1px rgba(0,0,0,0.2),0px 6px 10px 0px rgba(0,0,0,0.14),0px 1px 18px 0px rgba(0,0,0,0.12);}.go3162094071{padding-left:20px;}.go3844575157{background-color:#313131;}.go1725278324{background-color:#43a047;}.go3651055292{background-color:#d32f2f;}.go4215275574{background-color:#ff9800;}.go1930647212{background-color:#2196f3;}.go946087465{display:flex;align-items:center;padding:8px 0;}.go703367398{display:flex;align-items:center;margin-left:auto;padding-left:16px;margin-right:-8px;}.go3963613292{width:100%;position:relative;transform:translateX(0);top:0;right:0;bottom:0;left:0;min-width:288px;}.go1141946668{box-sizing:border-box;display:flex;max-height:100%;position:fixed;z-index:1400;height:auto;width:auto;transition:top 300ms ease 0ms,right 300ms ease 0ms,bottom 300ms ease 0ms,left 300ms ease 0ms,max-width 300ms ease 0ms;pointer-events:none;max-width:calc(100% - 40px);}.go1141946668 .notistack-CollapseWrapper{padding:6px 0px;transition:padding 300ms ease 0ms;}@media (max-width:599.95px){.go1141946668{width:100%;max-width:calc(100% - 32px);}}.go3868796639 .notistack-CollapseWrapper{padding:2px 0px;}.go3118922589{top:14px;flex-direction:column;}.go1453831412{bottom:14px;flex-direction:column-reverse;}.go4027089540{left:20px;}@media (min-width:600px){.go4027089540{align-items:flex-start;}}@media (max-width:599.95px){.go4027089540{left:16px;}}.go2989568495{right:20px;}@media (min-width:600px){.go2989568495{align-items:flex-end;}}@media (max-width:599.95px){.go2989568495{right:16px;}}.go4034260886{left:50%;transform:translateX(-50%);}@media (min-width:600px){.go4034260886{align-items:center;}}</style><meta name="maxai-mui-classname-prefix" content="injectDocumentStart-2026-06-05T11:03:23.195Z"><script src="chrome-extension://mhnlakgilnojmhinhkckjpncpbhabphi/apps/content-scripts/website/maxai.js"></script><link id="USE_CHAT_GPT_AI_CONTENT_CSS_LINK_TAG" rel="stylesheet" href="chrome-extension://mhnlakgilnojmhinhkckjpncpbhabphi/content.css"><link rel="stylesheet" href="./index_files/css2(1)"><style type="text/css">.transform-component-module_wrapper__SPB86 {
+  position: relative;
+  width: -moz-fit-content;
+  width: fit-content;
+  height: -moz-fit-content;
+  height: fit-content;
+  overflow: hidden;
+  -webkit-touch-callout: none; /* iOS Safari */
+  -webkit-user-select: none; /* Safari */
+  -khtml-user-select: none; /* Konqueror HTML */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* Internet Explorer/Edge */
+  user-select: none;
+  margin: 0;
+  padding: 0;
+}
+.transform-component-module_content__FBWxo {
+  display: flex;
+  flex-wrap: wrap;
+  width: -moz-fit-content;
+  width: fit-content;
+  height: -moz-fit-content;
+  height: fit-content;
+  margin: 0;
+  padding: 0;
+  transform-origin: 0% 0%;
+}
+.transform-component-module_content__FBWxo img {
+  pointer-events: none;
+}
+</style></head>
+<body>
+
+<div id="loading-screen" style="display: none;">
+  <div class="loader-logo">STR<span>AVA</span></div>
+  <div class="spinner"></div>
+  <p id="loading-text">Fetching activities... (0 so far)</p>
+</div>
+
+<div id="error-screen">
+  <h2>Could not load data</h2>
+  <p id="error-detail">Check your credentials and try again.</p>
+  <button onclick="location.reload()" style="margin-top:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 24px;font-family:var(--font-mono);font-size:13px;cursor:pointer;">Retry</button>
+</div>
+
+<div id="dashboard" style="display: block;">
+  <div class="topbar">
+    <div class="topbar-logo">STRAVA DASHBOARD</div>
+    <div class="athlete-pill">
+      <img id="av" src="./index_files/large.jpg" alt="avatar">
+      <div>
+        <div class="athlete-pill-name" id="aname">Osama Nabulsi</div>
+        <div class="athlete-pill-meta" id="ameta">@onabulsi · 103 activities</div>
+      </div>
+    </div>
+    <span id="last-updated">Updated 2:03:25 PM</span>
+  </div>
+
+  <div class="main">
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab(&#39;overview&#39;,this)">Overview</button>
+      <button class="nav-tab" onclick="switchTab(&#39;load&#39;,this)">Training load</button>
+      <button class="nav-tab" onclick="switchTab(&#39;pace&#39;,this)">Pace &amp; speed</button>
+      <button class="nav-tab" onclick="switchTab(&#39;heartrate&#39;,this)">Heart rate</button>
+      <button class="nav-tab" onclick="switchTab(&#39;activities&#39;,this)">All activities</button>
+      <button class="nav-tab" onclick="switchTab(&#39;coaching&#39;,this)">🏔️ Coach</button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div id="tab-overview" class="tab-panel active">
+      <div class="metrics-grid" id="overview-metrics"><div class="metric-card" style="--c:var(--accent)">
+    <div class="metric-label">Total activities</div>
+    <div class="metric-value">103<span class="metric-unit"></span></div>
+    <div class="metric-sub">2 this month</div>
+  </div><div class="metric-card" style="--c:var(--green)">
+    <div class="metric-label">Total distance</div>
+    <div class="metric-value">208<span class="metric-unit">km</span></div>
+    <div class="metric-sub"><span class="trend-dn">↓ 95% vs last month</span></div>
+  </div><div class="metric-card" style="--c:var(--blue)">
+    <div class="metric-label">Elevation gain</div>
+    <div class="metric-value">3,929<span class="metric-unit">m</span></div>
+    <div class="metric-sub">all time</div>
+  </div><div class="metric-card" style="--c:var(--purple)">
+    <div class="metric-label">Moving time</div>
+    <div class="metric-value">109<span class="metric-unit">hrs</span></div>
+    <div class="metric-sub">5 days</div>
+  </div><div class="metric-card" style="--c:var(--green)">
+    <div class="metric-label">Runs logged</div>
+    <div class="metric-value">24<span class="metric-unit"></span></div>
+    <div class="metric-sub">156 km total</div>
+  </div><div class="metric-card" style="--c:var(--amber)">
+    <div class="metric-label">Avg per week</div>
+    <div class="metric-value">0.4<span class="metric-unit">acts</span></div>
+    <div class="metric-sub">since first activity</div>
+  </div></div>
+      <div class="insights-grid" id="insights-grid"><div class="insight-card" style="--ic:var(--green)">
+    <div class="insight-icon">🏃</div>
+    <div class="insight-title">Best pace</div>
+    <div class="insight-value">1:34 /km</div>
+    <div class="insight-body">Outdoor run · 0.3 km</div>
+  </div><div class="insight-card" style="--ic:var(--blue)">
+    <div class="insight-icon">📏</div>
+    <div class="insight-title">Longest run</div>
+    <div class="insight-value">21.6 km</div>
+    <div class="insight-body">Wadi rum moonlight marathon · 1 May 26</div>
+  </div><div class="insight-card" style="--ic:var(--accent)">
+    <div class="insight-icon">💀</div>
+    <div class="insight-title">Hardest effort</div>
+    <div class="insight-value">465</div>
+    <div class="insight-body">Wadi rum moonlight marathon · 1 May 26</div>
+  </div><div class="insight-card" style="--ic:var(--red)">
+    <div class="insight-icon">❤️</div>
+    <div class="insight-title">Avg heart rate</div>
+    <div class="insight-value">119 bpm</div>
+    <div class="insight-body">Across 97 activities with HR data</div>
+  </div><div class="insight-card" style="--ic:var(--green)">
+    <div class="insight-icon">📈</div>
+    <div class="insight-title">Training load</div>
+    <div class="insight-value">slightly rising</div>
+    <div class="insight-body">Recent 2-week suffer: 961 vs prior 848</div>
+  </div><div class="insight-card" style="--ic:var(--purple)">
+    <div class="insight-icon">🗓️</div>
+    <div class="insight-title">Streak</div>
+    <div class="insight-value">0 days</div>
+    <div class="insight-body">Current consecutive active days</div>
+  </div></div>
+      <div class="card-row">
+        <div class="card">
+          <div class="card-title">Monthly distance (km)</div>
+          <div style="position:relative;height:200px;"><canvas id="monthlyDistChart" width="518" height="200" style="display: block; box-sizing: border-box; height: 200px; width: 518px;"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Activity mix</div>
+          <div style="position:relative;height:160px;"><canvas id="typePieChart" width="518" height="160" style="display: block; box-sizing: border-box; height: 160px; width: 518px;"></canvas></div>
+          <div class="legend" id="type-legend"><span><span class="ldot" style="background:#fc4c02"></span>WeightTraining (33)</span><span><span class="ldot" style="background:#3dd68c"></span>Run (21)</span><span><span class="ldot" style="background:#a78bfa"></span>Crossfit (19)</span><span><span class="ldot" style="background:#5b9cf6"></span>HighIntensityIntervalTraining (15)</span><span><span class="ldot" style="background:#f59e0b"></span>Workout (9)</span><span><span class="ldot" style="background:#f87171"></span>TrailRun (3)</span><span><span class="ldot" style="background:#6e6e82"></span>Hike (2)</span><span><span class="ldot" style="background:#38bdf8"></span>Walk (1)</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Weekly activity volume (last 16 weeks)</div>
+        <div style="position:relative;height:200px;"><canvas id="weeklyVolumeChart" width="1102" height="200" style="display: block; box-sizing: border-box; height: 200px; width: 1102px;"></canvas></div>
+      </div>
+    </div>
+
+    <!-- LOAD -->
+    <div id="tab-load" class="tab-panel">
+      <div class="metrics-grid" id="load-metrics"><div class="metric-card" style="--c:var(--accent)">
+    <div class="metric-label">7-day suffer</div>
+    <div class="metric-value">140<span class="metric-unit"></span></div>
+    <div class="metric-sub">4 activities</div>
+  </div><div class="metric-card" style="--c:var(--blue)">
+    <div class="metric-label">28-day suffer</div>
+    <div class="metric-value">1061<span class="metric-unit"></span></div>
+    <div class="metric-sub">18 activities</div>
+  </div><div class="metric-card" style="--c:var(--blue)">
+    <div class="metric-label">ACWR ratio</div>
+    <div class="metric-value">0.53<span class="metric-unit"></span></div>
+    <div class="metric-sub">Under-training</div>
+  </div><div class="metric-card" style="--c:var(--purple)">
+    <div class="metric-label">All-time suffer</div>
+    <div class="metric-value">3,496<span class="metric-unit"></span></div>
+    <div class="metric-sub">across 95 activities</div>
+  </div></div>
+      <div class="card">
+        <div class="card-title">Acute (7-day) vs chronic (28-day) load · suffer score based</div>
+        <div style="position:relative;height:240px;"><canvas id="acwrChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+        <div class="legend" style="margin-top:12px;">
+          <span><span class="ldot" style="background:#fc4c02;"></span>Acute load (7d)</span>
+          <span><span class="ldot" style="background:#5b9cf6;"></span>Chronic load (28d)</span>
+          <span><span class="ldot" style="background:rgba(245,158,11,0.4);width:16px;height:8px;border-radius:2px;"></span>Danger zone (ACWR &gt; 1.5)</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Suffer score by activity</div>
+        <div style="position:relative;height:220px;"><canvas id="sufferTimeChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Weekly suffer score heatmap (last 12 weeks)</div>
+        <div id="heatmap" style="display:flex;flex-wrap:wrap;gap:4px;"><div title="2 Feb — suffer: 94" style="flex:1;min-width:40px;background:rgba(252,76,2,0.18);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">2 Feb</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">94</div>
+    </div><div title="9 Feb — suffer: 85" style="flex:1;min-width:40px;background:rgba(252,76,2,0.16);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">9 Feb</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">85</div>
+    </div><div title="16 Feb — suffer: 9" style="flex:1;min-width:40px;background:rgba(252,76,2,0.10);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">16 Feb</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">9</div>
+    </div><div title="23 Feb — suffer: 48" style="flex:1;min-width:40px;background:rgba(252,76,2,0.10);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">23 Feb</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">48</div>
+    </div><div title="13 Apr — suffer: 34" style="flex:1;min-width:40px;background:rgba(252,76,2,0.10);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">13 Apr</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">34</div>
+    </div><div title="20 Apr — suffer: 87" style="flex:1;min-width:40px;background:rgba(252,76,2,0.16);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">20 Apr</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">87</div>
+    </div><div title="27 Apr — suffer: 532" style="flex:1;min-width:40px;background:rgba(252,76,2,1.00);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">27 Apr</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">532</div>
+    </div><div title="4 May — suffer: 138" style="flex:1;min-width:40px;background:rgba(252,76,2,0.26);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">4 May</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">138</div>
+    </div><div title="11 May — suffer: 334" style="flex:1;min-width:40px;background:rgba(252,76,2,0.63);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">11 May</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">334</div>
+    </div><div title="18 May — suffer: 410" style="flex:1;min-width:40px;background:rgba(252,76,2,0.77);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">18 May</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">410</div>
+    </div><div title="25 May — suffer: 131" style="flex:1;min-width:40px;background:rgba(252,76,2,0.25);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">25 May</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">131</div>
+    </div><div title="1 Jun — suffer: 95" style="flex:1;min-width:40px;background:rgba(252,76,2,0.18);border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">1 Jun</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">95</div>
+    </div></div>
+      </div>
+    </div>
+
+    <!-- PACE -->
+    <div id="tab-pace" class="tab-panel">
+      <div class="metrics-grid" id="pace-metrics"><div class="metric-card" style="--c:var(--green)">
+    <div class="metric-label">Avg pace</div>
+    <div class="metric-value">84:07<span class="metric-unit">/km</span></div>
+    <div class="metric-sub">24 runs</div>
+  </div><div class="metric-card" style="--c:var(--accent)">
+    <div class="metric-label">Best pace</div>
+    <div class="metric-value">1:34<span class="metric-unit">/km</span></div>
+    <div class="metric-sub">fastest average</div>
+  </div><div class="metric-card" style="--c:var(--blue)">
+    <div class="metric-label">Longest run</div>
+    <div class="metric-value">21.6<span class="metric-unit">km</span></div>
+    <div class="metric-sub">single activity</div>
+  </div><div class="metric-card" style="--c:var(--purple)">
+    <div class="metric-label">Total run dist</div>
+    <div class="metric-value">157<span class="metric-unit">km</span></div>
+    <div class="metric-sub">all time</div>
+  </div><div class="metric-card" style="--c:var(--green)">
+    <div class="metric-label">Pace trend</div>
+    <div class="metric-value">↑ Improving<span class="metric-unit"></span></div>
+    <div class="metric-sub">vs previous 5 runs</div>
+  </div></div>
+      <div class="card-row">
+        <div class="card">
+          <div class="card-title">Pace trend (runs · min/km)</div>
+          <div style="position:relative;height:200px;"><canvas id="paceTrendChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Distance distribution (runs)</div>
+          <div style="position:relative;height:200px;"><canvas id="distDistChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Fastest runs</div>
+        <div id="fastest-runs"><div class="pace-bar-wrap">
+      <div class="pace-name" title="Outdoor run">Outdoor run</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:100%"></div></div>
+      <div class="pace-val">1:34/km</div>
+    </div><div class="pace-bar-wrap">
+      <div class="pace-name" title="ABS speed short run">ABS speed short run</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:27%"></div></div>
+      <div class="pace-val">5:50/km</div>
+    </div><div class="pace-bar-wrap">
+      <div class="pace-name" title="5km">5km</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:26%"></div></div>
+      <div class="pace-val">5:54/km</div>
+    </div><div class="pace-bar-wrap">
+      <div class="pace-name" title="Morning Run">Morning Run</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:26%"></div></div>
+      <div class="pace-val">6:00/km</div>
+    </div><div class="pace-bar-wrap">
+      <div class="pace-name" title="Outdoor run">Outdoor run</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:25%"></div></div>
+      <div class="pace-val">6:19/km</div>
+    </div><div class="pace-bar-wrap">
+      <div class="pace-name" title="Jan 1st / 1km">Jan 1st / 1km</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:25%"></div></div>
+      <div class="pace-val">6:21/km</div>
+    </div><div class="pace-bar-wrap">
+      <div class="pace-name" title="Ayla marathon">Ayla marathon</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:24%"></div></div>
+      <div class="pace-val">6:32/km</div>
+    </div><div class="pace-bar-wrap">
+      <div class="pace-name" title="5KM recovery run">5KM recovery run</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:23%"></div></div>
+      <div class="pace-val">6:41/km</div>
+    </div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Pace vs distance scatter</div>
+        <div style="position:relative;height:220px;"><canvas id="paceScatterChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+      </div>
+    </div>
+
+    <!-- HEART RATE -->
+    <div id="tab-heartrate" class="tab-panel">
+      <div class="metrics-grid" id="hr-metrics"><div class="metric-card" style="--c:var(--red)">
+    <div class="metric-label">Avg heart rate</div>
+    <div class="metric-value">119<span class="metric-unit">bpm</span></div>
+    <div class="metric-sub">97 activities</div>
+  </div><div class="metric-card" style="--c:var(--accent)">
+    <div class="metric-label">Max recorded</div>
+    <div class="metric-value">196<span class="metric-unit">bpm</span></div>
+    <div class="metric-sub">Outdoor run</div>
+  </div><div class="metric-card" style="--c:var(--blue)">
+    <div class="metric-label">Lowest avg HR</div>
+    <div class="metric-value">78<span class="metric-unit">bpm</span></div>
+    <div class="metric-sub">most relaxed activity</div>
+  </div><div class="metric-card" style="--c:var(--green)">
+    <div class="metric-label">Avg run HR</div>
+    <div class="metric-value">153<span class="metric-unit">bpm</span></div>
+    <div class="metric-sub">20 runs</div>
+  </div></div>
+      <div class="card-row">
+        <div class="card">
+          <div class="card-title">Heart rate zones (time in zone estimate)</div>
+          <div id="hr-zones">
+    <div class="zone-row">
+      <span class="zone-label">Z1 Recovery</span>
+      <div class="zone-bar-bg"><div class="zone-bar" style="width:100%;background:#3dd68c;"></div></div>
+      <span class="zone-count">38</span>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;padding-left:80px;">98–118 bpm</div>
+  
+    <div class="zone-row">
+      <span class="zone-label">Z2 Aerobic</span>
+      <div class="zone-bar-bg"><div class="zone-bar" style="width:55%;background:#5b9cf6;"></div></div>
+      <span class="zone-count">21</span>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;padding-left:80px;">118–137 bpm</div>
+  
+    <div class="zone-row">
+      <span class="zone-label">Z3 Tempo</span>
+      <div class="zone-bar-bg"><div class="zone-bar" style="width:34%;background:#f59e0b;"></div></div>
+      <span class="zone-count">13</span>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;padding-left:80px;">137–157 bpm</div>
+  
+    <div class="zone-row">
+      <span class="zone-label">Z4 Threshold</span>
+      <div class="zone-bar-bg"><div class="zone-bar" style="width:18%;background:#fc4c02;"></div></div>
+      <span class="zone-count">7</span>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;padding-left:80px;">157–176 bpm</div>
+  
+    <div class="zone-row">
+      <span class="zone-label">Z5 VO2 Max</span>
+      <div class="zone-bar-bg"><div class="zone-bar" style="width:3%;background:#f87171;"></div></div>
+      <span class="zone-count">1</span>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;padding-left:80px;">176–196 bpm</div>
+  </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Avg HR trend over time</div>
+          <div style="position:relative;height:200px;"><canvas id="hrTrendChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Max HR by activity type</div>
+        <div style="position:relative;height:200px;"><canvas id="hrTypeChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">HR vs suffer score</div>
+        <div style="position:relative;height:220px;"><canvas id="hrSufferChart" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div>
+      </div>
+    </div>
+
+    <!-- COACHING -->
+    <div id="tab-coaching" class="tab-panel">
+    
+  <div class="race-banner">
+    <div>
+      <div class="race-banner-title">🏔️ Echo Trails Run</div>
+      <div class="race-banner-sub">July 3, 2026 · 4.1 weeks away · <span class="phase-badge" style="background:rgba(61,214,140,0.12);color:#3dd68c;">Build phase</span></div>
+    </div>
+    <div style="text-align:center;">
+      <div class="countdown-days">29</div>
+      <div class="countdown-label">days to go</div>
+    </div>
+  </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">This week's plan</div>
+      <div class="week-plan"><div class="day-cell ">
+      <div class="day-name">Mon</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">1/6</div>
+      <div class="day-type" style="color:var(--purple);margin-top:4px;">🏋️ Gym</div>
+      <div class="day-detail">Weight
+training</div>
+    </div><div class="day-cell ">
+      <div class="day-name">Tue</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">2/6</div>
+      <div class="day-type" style="color:var(--purple);margin-top:4px;">🏋️ Gym</div>
+      <div class="day-detail">Weight
+training</div>
+    </div><div class="day-cell ">
+      <div class="day-name">Wed</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">3/6</div>
+      <div class="day-type" style="color:var(--green);margin-top:4px;">🏃 Run</div>
+      <div class="day-detail">8–12km
+tempo</div>
+    </div><div class="day-cell ">
+      <div class="day-name">Thu</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">4/6</div>
+      <div class="day-type" style="color:var(--purple);margin-top:4px;">🏋️ Gym</div>
+      <div class="day-detail">Weight
+training</div>
+    </div><div class="day-cell today">
+      <div class="day-name">Fri</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">5/6</div>
+      <div class="day-type" style="color:var(--blue);margin-top:4px;">😴 Rest</div>
+      <div class="day-detail">Pre-run
+recovery</div>
+    </div><div class="day-cell ">
+      <div class="day-name">Sat</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">6/6</div>
+      <div class="day-type" style="color:var(--green);margin-top:4px;">🏃 Run</div>
+      <div class="day-detail">10km trail
+easy pace</div>
+    </div><div class="day-cell ">
+      <div class="day-name">Sun</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">7/6</div>
+      <div class="day-type" style="color:var(--muted);margin-top:4px;">😴 Rest</div>
+      <div class="day-detail">Active
+recovery</div>
+    </div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Race readiness score</div>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+        <div style="font-family:&#39;Outfit&#39;,sans-serif;font-size:52px;font-weight:800;color:var(--green);letter-spacing:-2px;">85<span style="font-size:24px;color:var(--muted);">/100</span></div>
+        <div style="flex:1;min-width:200px;">
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Longest run</span><span>21.6km / 21km target</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:100%;background:var(--green);"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Trail runs logged</span><span>3 / 5 recommended</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:60%;background:var(--blue);"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Load balance (ACWR)</span><span>0.53 ⚠️ adjust</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:41%;background:var(--green);"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Weekly consistency</span><span>18 acts in 28 days</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:100%;background:var(--purple);"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="advice-grid">
+      
+        <div class="advice-card" style="--ac:var(--green)">
+          <div class="advice-card-header">
+            <span class="advice-icon">🏃</span>
+            <span class="advice-title">Tomorrow's training run</span>
+            <span class="advice-priority p-high">high</span>
+          </div>
+          <div class="advice-body">You're heading to the Echo Trails location for a <strong>10km training run</strong> — perfect timing. 
+    Run at an <strong>easy to moderate effort (Z2–Z3)</strong>, targeting 7:20–7:48 /km. 
+    Focus on <strong>terrain familiarisation</strong>, not pace. Note the elevation profile and any technical sections. 
+    Keep HR under <strong>153 bpm</strong>. Carry water and fuel.</div>
+        </div>
+      
+        <div class="advice-card" style="--ac:var(--blue)">
+          <div class="advice-card-header">
+            <span class="advice-icon">📉</span>
+            <span class="advice-title">Training load — low</span>
+            <span class="advice-priority p-med">med</span>
+          </div>
+          <div class="advice-body">Your recent load is lighter than ideal (ACWR: <strong>0.53</strong>). With 29 days to race, 
+      you have time to build slightly. Aim for <strong>3–4 sessions this week</strong> 
+      including tomorrow's trail run. Don't spike volume — gradual is key.</div>
+        </div>
+      
+        <div class="advice-card" style="--ac:var(--green)">
+          <div class="advice-card-header">
+            <span class="advice-icon">💪</span>
+            <span class="advice-title">Long run base — solid</span>
+            <span class="advice-priority p-low">low</span>
+          </div>
+          <div class="advice-body">Your longest run is <strong>21.6km</strong> — a solid base for the trail race. 
+      Consider one more long run of 18–20km before tapering. 
+      Trust your training and focus on recovery and sharpness.</div>
+        </div>
+      
+        <div class="advice-card" style="--ac:var(--red)">
+          <div class="advice-card-header">
+            <span class="advice-icon">❤️</span>
+            <span class="advice-title">Heart rate strategy</span>
+            <span class="advice-priority p-med">med</span>
+          </div>
+          <div class="advice-body">Your avg HR across activities is <strong>119 bpm</strong>. For a trail run, starting conservatively saves you on the climbs. 
+      Target <strong>Z2 (118–137 bpm)</strong> on flats and uphills — let HR drift, don't chase pace up hills. 
+      Your max recorded is <strong>196 bpm</strong> — you have headroom for the final push.</div>
+        </div>
+      
+        <div class="advice-card" style="--ac:var(--purple)">
+          <div class="advice-card-header">
+            <span class="advice-icon">🏔️</span>
+            <span class="advice-title">Trail-specific prep</span>
+            <span class="advice-priority p-med">med</span>
+          </div>
+          <div class="advice-body">You have <strong>3 trail runs</strong> logged. 
+    Good trail experience. Tomorrow focus on technical sections and downhill running form. 
+    On race day: <strong>hike steep uphills</strong> (even elites do), run all downhills, and <strong>eat before you're hungry, drink before you're thirsty</strong>.</div>
+        </div>
+      
+        <div class="advice-card" style="--ac:var(--blue)">
+          <div class="advice-card-header">
+            <span class="advice-icon">🎯</span>
+            <span class="advice-title">Race day strategy</span>
+            <span class="advice-priority p-med">med</span>
+          </div>
+          <div class="advice-body">Start <strong>conservatively — the first 3km should feel easy</strong>. You'll thank yourself at km 8. 
+    Nutrition: take a gel or snack every <strong>45–60 minutes</strong>. Carry at least <strong>500ml water</strong>. 
+    Don't wear new shoes or gear on race day. 
+    Night before: <strong>lay out all gear, sleep 8hrs, light carb meal</strong>.</div>
+        </div>
+      
+    </div>
+  </div>
+
+    <!-- ALL ACTIVITIES -->
+    <div id="tab-activities" class="tab-panel">
+      <div class="filter-bar" id="act-filters"><button class="fbtn active" onclick="filterActs(&#39;all&#39;,this)">All (103)</button><button class="fbtn" onclick="filterActs(&#39;Run&#39;,this)">Run (21)</button><button class="fbtn" onclick="filterActs(&#39;HighIntensityIntervalTraining&#39;,this)">HighIntensityIntervalTraining (15)</button><button class="fbtn" onclick="filterActs(&#39;WeightTraining&#39;,this)">WeightTraining (33)</button><button class="fbtn" onclick="filterActs(&#39;Crossfit&#39;,this)">Crossfit (19)</button><button class="fbtn" onclick="filterActs(&#39;Workout&#39;,this)">Workout (9)</button><button class="fbtn" onclick="filterActs(&#39;TrailRun&#39;,this)">TrailRun (3)</button><button class="fbtn" onclick="filterActs(&#39;Hike&#39;,this)">Hike (2)</button><button class="fbtn" onclick="filterActs(&#39;Walk&#39;,this)">Walk (1)</button></div>
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Name</th><th>Type</th><th>Distance</th>
+              <th>Time</th><th>Pace</th><th>Avg HR</th><th>Max HR</th>
+              <th>Elev</th><th>Suffer</th>
+            </tr></thead>
+            <tbody id="act-tbody"><tr>
+      <td style="color:var(--muted);white-space:nowrap;">3 Jun 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">5KM recovery run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>5.0 km</td>
+      <td style="color:var(--muted);">33m</td>
+      <td style="color:var(--muted2);">6:41</td>
+      <td>158 bpm</td>
+      <td>168 bpm</td>
+      <td>72m</td>
+      <td><span class="suffer-pill s-mi">61</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">1 Jun 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Tabata &amp; Conditioning</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">2h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>116 bpm</td>
+      <td>166 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">34</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">31 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ABS speed short run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>3.1 km</td>
+      <td style="color:var(--muted);">17m</td>
+      <td style="color:var(--muted2);">5:50</td>
+      <td>149 bpm</td>
+      <td>174 bpm</td>
+      <td>50m</td>
+      <td><span class="suffer-pill s-lo">23</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">30 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Conditioning onemorerep</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">59m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>122 bpm</td>
+      <td>156 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">22</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">29 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Zabboud trail run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>4.7 km</td>
+      <td style="color:var(--muted);">39m</td>
+      <td style="color:var(--muted2);">8:24</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">28 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">5km</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>5.0 km</td>
+      <td style="color:var(--muted);">29m</td>
+      <td style="color:var(--muted2);">5:54</td>
+      <td>163 bpm</td>
+      <td>181 bpm</td>
+      <td>66m</td>
+      <td><span class="suffer-pill s-mi">66</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">26 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training and HIIT</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 57m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>102 bpm</td>
+      <td>154 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">20</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">23 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">One Run Jordan</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>20.9 km</td>
+      <td style="color:var(--muted);">2h 28m</td>
+      <td style="color:var(--muted2);">7:07</td>
+      <td>162 bpm</td>
+      <td>179 bpm</td>
+      <td>148m</td>
+      <td><span class="suffer-pill s-ex">328</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">21 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Outdoor run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>3.0 km</td>
+      <td style="color:var(--muted);">22m</td>
+      <td style="color:var(--muted2);">7:23</td>
+      <td>153 bpm</td>
+      <td>169 bpm</td>
+      <td>42m</td>
+      <td><span class="suffer-pill s-mi">34</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">19 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Outdoor run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>5.0 km</td>
+      <td style="color:var(--muted);">31m</td>
+      <td style="color:var(--muted2);">6:19</td>
+      <td>154 bpm</td>
+      <td>172 bpm</td>
+      <td>68m</td>
+      <td><span class="suffer-pill s-mi">48</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">17 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Outdoor run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>5.0 km</td>
+      <td style="color:var(--muted);">34m</td>
+      <td style="color:var(--muted2);">6:54</td>
+      <td>149 bpm</td>
+      <td>166 bpm</td>
+      <td>74m</td>
+      <td><span class="suffer-pill s-mi">40</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">16 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">55m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>87 bpm</td>
+      <td>128 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">6</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">15 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">One Run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>10.0 km</td>
+      <td style="color:var(--muted);">1h 12m</td>
+      <td style="color:var(--muted2);">7:12</td>
+      <td>150 bpm</td>
+      <td>174 bpm</td>
+      <td>57m</td>
+      <td><span class="suffer-pill s-mi">93</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">13 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Outdoor run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>7.8 km</td>
+      <td style="color:var(--muted);">56m</td>
+      <td style="color:var(--muted2);">7:16</td>
+      <td>177 bpm</td>
+      <td>196 bpm</td>
+      <td>40m</td>
+      <td><span class="suffer-pill s-hi">186</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">12 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training back</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 6m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>95 bpm</td>
+      <td>145 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">10 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">59m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>129 bpm</td>
+      <td>164 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">29</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">9 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit /One more rep</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">56m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>142 bpm</td>
+      <td>174 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">54</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">9 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training chest and shoulders</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 1m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>95 bpm</td>
+      <td>148 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">8 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>5.1 km</td>
+      <td style="color:var(--muted);">41m</td>
+      <td style="color:var(--muted2);">8:16</td>
+      <td>143 bpm</td>
+      <td>173 bpm</td>
+      <td>81m</td>
+      <td><span class="suffer-pill s-mi">35</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">6 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 15m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>103 bpm</td>
+      <td>151 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">12</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">1 May 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Wadi rum moonlight marathon</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>21.6 km</td>
+      <td style="color:var(--muted);">3h 47m</td>
+      <td style="color:var(--muted2);">10:31</td>
+      <td>159 bpm</td>
+      <td>195 bpm</td>
+      <td>489m</td>
+      <td><span class="suffer-pill s-ex">465</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">28 Apr 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 10m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>109 bpm</td>
+      <td>155 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">13</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">27 Apr 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">59m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>140 bpm</td>
+      <td>175 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">54</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">26 Apr 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Calisthenics</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 15m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>110 bpm</td>
+      <td>170 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">16</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">25 Apr 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Trail Run</td>
+      <td><span class="badge b-run">TrailRun</span></td>
+      <td>4.4 km</td>
+      <td style="color:var(--muted);">40m</td>
+      <td style="color:var(--muted2);">9:13</td>
+      <td>159 bpm</td>
+      <td>179 bpm</td>
+      <td>121m</td>
+      <td><span class="suffer-pill s-mi">71</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">13 Apr 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>134 bpm</td>
+      <td>170 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">34</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">28 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Afternoon Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">53m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>136 bpm</td>
+      <td>165 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">37</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">23 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Legs  Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">50m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>108 bpm</td>
+      <td>169 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">11</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">18 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">48m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>109 bpm</td>
+      <td>150 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">14 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Trail Run</td>
+      <td><span class="badge b-run">TrailRun</span></td>
+      <td>6.8 km</td>
+      <td style="color:var(--muted);">1h 3m</td>
+      <td style="color:var(--muted2);">9:21</td>
+      <td>144 bpm</td>
+      <td>175 bpm</td>
+      <td>183m</td>
+      <td><span class="suffer-pill s-mi">85</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">7 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 2m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>133 bpm</td>
+      <td>166 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">39</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">6 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>4.0 km</td>
+      <td style="color:var(--muted);">24m</td>
+      <td style="color:var(--muted2);">6:00</td>
+      <td>151 bpm</td>
+      <td>171 bpm</td>
+      <td>20m</td>
+      <td><span class="suffer-pill s-mi">32</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">4 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 4m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>101 bpm</td>
+      <td>151 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">10</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">2 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 6m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>111 bpm</td>
+      <td>152 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">13</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">1 Feb 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>130 bpm</td>
+      <td>170 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">36</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">31 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 1m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>128 bpm</td>
+      <td>162 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">26</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">28 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">34m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">28 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 5m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>127 bpm</td>
+      <td>160 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">24</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">26 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Afternoon Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>120 bpm</td>
+      <td>158 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">19</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">24 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Trail run</td>
+      <td><span class="badge b-run">TrailRun</span></td>
+      <td>11.8 km</td>
+      <td style="color:var(--muted);">1h 37m</td>
+      <td style="color:var(--muted2);">8:16</td>
+      <td>169 bpm</td>
+      <td>195 bpm</td>
+      <td>347m</td>
+      <td><span class="suffer-pill s-hi">269</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">24 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Hike</td>
+      <td><span class="badge b-other">Hike</span></td>
+      <td>11.8 km</td>
+      <td style="color:var(--muted);">1h 41m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>346m</td>
+      <td>—</td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">12 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Evening Weight Training back</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">50m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>103 bpm</td>
+      <td>147 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">11 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Calisthenics core</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">45m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>109 bpm</td>
+      <td>154 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">11 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 4m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>133 bpm</td>
+      <td>170 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">45</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">10 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>111 bpm</td>
+      <td>156 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">15</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">8 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 6m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>108 bpm</td>
+      <td>154 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">13</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">7 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">56m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>105 bpm</td>
+      <td>138 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">7 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>121 bpm</td>
+      <td>154 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">20</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">6 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Calisthenics upper</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">40m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>99 bpm</td>
+      <td>137 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">6</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">6 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">55m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>125 bpm</td>
+      <td>166 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">26</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">5 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Back</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 1m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>103 bpm</td>
+      <td>148 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">10</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">4 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Calisthenics Core</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">50m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>106 bpm</td>
+      <td>159 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">10</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">4 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>135 bpm</td>
+      <td>179 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-mi">39</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">3 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 1m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>127 bpm</td>
+      <td>163 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">29</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">2 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Jan 2nd /2km</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>2.0 km</td>
+      <td style="color:var(--muted);">14m</td>
+      <td style="color:var(--muted2);">7:22</td>
+      <td>151 bpm</td>
+      <td>165 bpm</td>
+      <td>13m</td>
+      <td><span class="suffer-pill s-lo">21</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">1 Jan 26</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Jan 1st / 1km</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>1.0 km</td>
+      <td style="color:var(--muted);">6m</td>
+      <td style="color:var(--muted2);">6:21</td>
+      <td>142 bpm</td>
+      <td>157 bpm</td>
+      <td>12m</td>
+      <td><span class="suffer-pill s-lo">6</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">31 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Legs, Arms and Abs</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">2h 5m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>106 bpm</td>
+      <td>154 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">23</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">30 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Calisthenics upper</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 18m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>97 bpm</td>
+      <td>169 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">11</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">28 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Core calisthenics</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>97 bpm</td>
+      <td>154 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">27 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">50m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>114 bpm</td>
+      <td>139 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">25 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">55m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>90 bpm</td>
+      <td>136 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">6</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">24 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Arms &amp; Abs</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>94 bpm</td>
+      <td>132 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">24 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">55m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>118 bpm</td>
+      <td>162 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">14</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">23 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Calisthenics upper</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">55m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>98 bpm</td>
+      <td>152 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">23 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>123 bpm</td>
+      <td>159 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">22</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">22 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Crossfit</td>
+      <td><span class="badge b-crossfit">Crossfit</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">54m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>115 bpm</td>
+      <td>150 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">13</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">22 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Weight Training</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>98 bpm</td>
+      <td>150 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">21 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Core calisthenics</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>1.1 km</td>
+      <td style="color:var(--muted);">2m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>78 bpm</td>
+      <td>145 bpm</td>
+      <td>8m</td>
+      <td>—</td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">21 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>123 bpm</td>
+      <td>152 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">19</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">20 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Conditioning</td>
+      <td><span class="badge b-workout">Workout</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>110 bpm</td>
+      <td>145 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">11</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">18 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 9m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>91 bpm</td>
+      <td>138 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">17 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>92 bpm</td>
+      <td>124 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">7</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">16 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 6m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>97 bpm</td>
+      <td>141 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">16 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>109 bpm</td>
+      <td>145 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">11</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">15 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 9m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>97 bpm</td>
+      <td>151 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">10</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">13 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">57m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>118 bpm</td>
+      <td>157 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">16</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">11 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 5m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>87 bpm</td>
+      <td>132 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">7</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">10 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 4m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>97 bpm</td>
+      <td>146 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">9 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT - Tabatta</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>99 bpm</td>
+      <td>147 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">9 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>99 bpm</td>
+      <td>147 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">7 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength Back</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">50m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>97 bpm</td>
+      <td>137 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">7</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">6 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>111 bpm</td>
+      <td>171 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">12</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">5 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Ayla marathon</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>10.0 km</td>
+      <td style="color:var(--muted);">1h 5m</td>
+      <td style="color:var(--muted2);">6:32</td>
+      <td>155 bpm</td>
+      <td>173 bpm</td>
+      <td>42m</td>
+      <td><span class="suffer-pill s-hi">106</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">3 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Arms and Abs</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>98 bpm</td>
+      <td>134 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">3 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>98 bpm</td>
+      <td>134 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">3 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strong Man</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">57m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>103 bpm</td>
+      <td>144 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">9</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">1 Dec 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength Back</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 2m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>92 bpm</td>
+      <td>134 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">8</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">30 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT One more rep</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>111 bpm</td>
+      <td>156 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">12</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">29 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Conditioning</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>113 bpm</td>
+      <td>147 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">13</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">27 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Legs calisthenics</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">45m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>101 bpm</td>
+      <td>131 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">7</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">27 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Legs one more rep</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>101 bpm</td>
+      <td>151 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">10</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">26 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength -Arms and Abs</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 0m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>105 bpm</td>
+      <td>148 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">10</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">25 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">KETTLE BELL</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">50m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>121 bpm</td>
+      <td>154 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">14</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">24 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Strength Back</td>
+      <td><span class="badge b-weight">WeightTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">1h 3m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>102 bpm</td>
+      <td>145 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">10</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">23 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">HIIT</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">51m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>128 bpm</td>
+      <td>157 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">20</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">22 Nov 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Conditioning</td>
+      <td><span class="badge b-other">HighIntensityIntervalTraining</span></td>
+      <td>—</td>
+      <td style="color:var(--muted);">50m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>120 bpm</td>
+      <td>149 bpm</td>
+      <td>—</td>
+      <td><span class="suffer-pill s-lo">12</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">31 Oct 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Outdoor run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>0.3 km</td>
+      <td style="color:var(--muted);">0m</td>
+      <td style="color:var(--muted2);">1:34</td>
+      <td>104 bpm</td>
+      <td>116 bpm</td>
+      <td>—</td>
+      <td>—</td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">24 Oct 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Hike</td>
+      <td><span class="badge b-other">Hike</span></td>
+      <td>16.0 km</td>
+      <td style="color:var(--muted);">3h 14m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>111 bpm</td>
+      <td>165 bpm</td>
+      <td>670m</td>
+      <td><span class="suffer-pill s-mi">53</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">24 Oct 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Hike</td>
+      <td><span class="badge b-other">Walk</span></td>
+      <td>22.4 km</td>
+      <td style="color:var(--muted);">6h 2m</td>
+      <td style="color:var(--muted2);">—</td>
+      <td>106 bpm</td>
+      <td>161 bpm</td>
+      <td>891m</td>
+      <td><span class="suffer-pill s-mi">68</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">17 Oct 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Amman Marathon 2025</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>10.1 km</td>
+      <td style="color:var(--muted);">1h 11m</td>
+      <td style="color:var(--muted2);">7:09</td>
+      <td>171 bpm</td>
+      <td>192 bpm</td>
+      <td>45m</td>
+      <td><span class="suffer-pill s-hi">217</span></td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">17 Oct 25</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>10.2 km</td>
+      <td style="color:var(--muted);">1h 10m</td>
+      <td style="color:var(--muted2);">6:56</td>
+      <td>—</td>
+      <td>—</td>
+      <td>43m</td>
+      <td>—</td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">23 Sept 21</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Morning Run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>0.0 km</td>
+      <td style="color:var(--muted);">0m</td>
+      <td style="color:var(--muted2);">10:20</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+    </tr><tr>
+      <td style="color:var(--muted);white-space:nowrap;">23 Sept 21</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Night Run</td>
+      <td><span class="badge b-run">Run</span></td>
+      <td>0.0 km</td>
+      <td style="color:var(--muted);">31m</td>
+      <td style="color:var(--muted2);">1851:51</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+    </tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID = '250170';
+const CLIENT_SECRET = '8509d0dc53b6d07e5f0bfa264948561f3d772273';
+const REFRESH_TOKEN = '54f26198061aa014d35185fe355d4d353c5d2a5c';
+
+let allActs = [], charts = {};
+
+// ── helpers ────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmtDist = m => m > 0 ? (m/1000).toFixed(1)+' km' : '—';
+const fmtTime = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0?`${h}h ${m}m`:`${m}m`; };
+const fmtDate = d => new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'});
+const fmtPace = mps => { if(!mps||mps===0) return '—'; const spm=1/mps*1000/60; const m=Math.floor(spm),s=Math.round((spm-m)*60); return `${m}:${s.toString().padStart(2,'0')}`; };
+const isRun = a => ['Run','TrailRun','VirtualRun'].includes(a.sport_type||a.type);
+const isRide = a => ['Ride','VirtualRide','MountainBikeRide'].includes(a.sport_type||a.type);
+
+function badgeClass(t) {
+  const s = (t||'').toLowerCase();
+  if(s.includes('run')||s.includes('trail')) return 'b-run';
+  if(s.includes('weight')||s.includes('strength')) return 'b-weight';
+  if(s.includes('crossfit')) return 'b-crossfit';
+  if(s.includes('ride')||s.includes('cycling')) return 'b-ride';
+  if(s.includes('workout')||s.includes('cali')) return 'b-workout';
+  return 'b-other';
+}
+
+function sufferClass(s) {
+  if(!s) return '';
+  if(s<30) return 's-lo'; if(s<100) return 's-mi'; if(s<300) return 's-hi'; return 's-ex';
+}
+
+function weekKey(d) {
+  const dt = new Date(d), day = dt.getDay(), diff = dt.getDate()-day+(day===0?-6:1);
+  const mon = new Date(dt.setDate(diff));
+  return mon.toISOString().slice(0,10);
+}
+
+function destroyChart(id) { if(charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+const CHART_DEFAULTS = {
+  color: '#6e6e82',
+  gridColor: 'rgba(255,255,255,0.05)',
+  tickFont: { family: "'DM Mono', monospace", size: 10 }
+};
+
+function baseScales(xLabel='', yLabel='') {
+  return {
+    x: { ticks: { color: CHART_DEFAULTS.color, font: CHART_DEFAULTS.tickFont, maxRotation:40 }, grid: { color: CHART_DEFAULTS.gridColor }, title: xLabel?{display:true,text:xLabel,color:CHART_DEFAULTS.color,font:{size:10}}:{display:false} },
+    y: { ticks: { color: CHART_DEFAULTS.color, font: CHART_DEFAULTS.tickFont }, grid: { color: CHART_DEFAULTS.gridColor }, title: yLabel?{display:true,text:yLabel,color:CHART_DEFAULTS.color,font:{size:10}}:{display:false} }
+  };
+}
+
+// ── auth ───────────────────────────────────────────────────────
+async function getToken() {
+  setText('Refreshing token...');
+  const r = await fetch('https://www.strava.com/oauth/token', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ client_id:CLIENT_ID, client_secret:CLIENT_SECRET, refresh_token:REFRESH_TOKEN, grant_type:'refresh_token' })
+  });
+  if(!r.ok) throw new Error('Token refresh failed');
+  const d = await r.json();
+  return d.access_token;
+}
+
+async function fetchAll(token) {
+  let all=[], page=1;
+  while(true) {
+    setText(`Fetching activities... (${all.length} so far)`);
+    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=200&page=${page}`, { headers:{Authorization:`Bearer ${token}`} });
+    if(!r.ok) throw new Error('Activities fetch failed');
+    const d = await r.json();
+    if(!d.length) break;
+    all = all.concat(d);
+    if(d.length<200) break;
+    page++;
+  }
+  return all;
+}
+
+async function fetchAthlete(token) {
+  const r = await fetch('https://www.strava.com/api/v3/athlete', { headers:{Authorization:`Bearer ${token}`} });
+  return r.json();
+}
+
+function setText(t) { $('loading-text').textContent = t; }
+
+// ── boot ───────────────────────────────────────────────────────
+(async () => {
+  try {
+    const token = await getToken();
+    const [athlete, acts] = await Promise.all([fetchAthlete(token), fetchAll(token)]);
+    allActs = acts.sort((a,b) => new Date(b.start_date)-new Date(a.start_date));
+    $('loading-screen').style.display = 'none';
+    $('dashboard').style.display = 'block';
+    renderAll(athlete, allActs);
+  } catch(e) {
+    $('loading-screen').style.display = 'none';
+    $('error-screen').style.display = 'flex';
+    $('error-detail').textContent = e.message;
+  }
+})();
+
+// ── tab switch ─────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  $('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── main render ────────────────────────────────────────────────
+function renderAll(athlete, acts) {
+  // topbar
+  $('av').src = athlete.profile || '';
+  $('aname').textContent = `${athlete.firstname} ${athlete.lastname}`;
+  $('ameta').textContent = `@${athlete.username} · ${acts.length} activities`;
+  $('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+
+  renderOverview(acts);
+  renderLoad(acts);
+  renderPace(acts);
+  renderHR(acts);
+  renderActivities(acts);
+  renderCoaching(acts);
+}
+
+// ══════════════════════════════════════════
+// OVERVIEW
+// ══════════════════════════════════════════
+function renderOverview(acts) {
+  const totalDist = acts.reduce((s,a)=>s+(a.distance||0),0);
+  const totalElev = acts.reduce((s,a)=>s+(a.total_elevation_gain||0),0);
+  const totalTime = acts.reduce((s,a)=>s+(a.moving_time||0),0);
+  const runs = acts.filter(isRun);
+  const thisMonth = acts.filter(a=>a.start_date_local.slice(0,7)===new Date().toISOString().slice(0,7));
+  const lastMonth = acts.filter(a=>{const d=new Date(); d.setMonth(d.getMonth()-1); return a.start_date_local.slice(0,7)===d.toISOString().slice(0,7);});
+  const tmDist = thisMonth.reduce((s,a)=>s+(a.distance||0),0)/1000;
+  const lmDist = lastMonth.reduce((s,a)=>s+(a.distance||0),0)/1000;
+  const trendPct = lmDist>0?Math.round((tmDist-lmDist)/lmDist*100):0;
+  const trendStr = trendPct>0?`<span class="trend-up">↑ ${trendPct}% vs last month</span>`:trendPct<0?`<span class="trend-dn">↓ ${Math.abs(trendPct)}% vs last month</span>`:`<span class="trend-eq">→ same as last month</span>`;
+
+  $('overview-metrics').innerHTML = [
+    {label:'Total activities', val:acts.length, unit:'', c:'var(--accent)', sub:`${thisMonth.length} this month`},
+    {label:'Total distance', val:(totalDist/1000).toFixed(0), unit:'km', c:'var(--green)', sub:trendStr},
+    {label:'Elevation gain', val:Math.round(totalElev).toLocaleString(), unit:'m', c:'var(--blue)', sub:'all time'},
+    {label:'Moving time', val:Math.round(totalTime/3600), unit:'hrs', c:'var(--purple)', sub:`${Math.round(totalTime/3600/24)} days`},
+    {label:'Runs logged', val:runs.length, unit:'', c:'var(--green)', sub:`${runs.reduce((s,a)=>s+(a.distance||0),0)/1000|0} km total`},
+    {label:'Avg per week', val:(acts.length/Math.max(1,Math.ceil((new Date()-new Date(acts[acts.length-1]?.start_date||new Date()))/(7*86400000)))).toFixed(1), unit:'acts', c:'var(--amber)', sub:'since first activity'},
+  ].map(m=>`<div class="metric-card" style="--c:${m.c}">
+    <div class="metric-label">${m.label}</div>
+    <div class="metric-value">${m.val}<span class="metric-unit">${m.unit}</span></div>
+    <div class="metric-sub">${m.sub}</div>
+  </div>`).join('');
+
+  // Insights
+  const hrActs = acts.filter(a=>a.average_heartrate);
+  const meanHR = hrActs.length ? Math.round(hrActs.reduce((s,a)=>s+a.average_heartrate,0)/hrActs.length) : 0;
+  const bestRun = runs.filter(a=>a.distance>0&&a.average_speed>0).sort((a,b)=>b.average_speed-a.average_speed)[0];
+  const longestRun = runs.sort((a,b)=>b.distance-a.distance)[0];
+  const mostSuffer = acts.filter(a=>a.suffer_score).sort((a,b)=>b.suffer_score-a.suffer_score)[0];
+  const recentActs = acts.slice(0,14);
+  const recentSuffer = recentActs.reduce((s,a)=>s+(a.suffer_score||0),0);
+  const olderActs = acts.slice(14,28);
+  const olderSuffer = olderActs.reduce((s,a)=>s+(a.suffer_score||0),0);
+  const loadTrend = recentSuffer > olderSuffer*1.3 ? 'rising fast 🔺' : recentSuffer > olderSuffer ? 'slightly rising' : 'manageable ✓';
+
+  $('insights-grid').innerHTML = [
+    { icon:'🏃', title:'Best pace', val: bestRun?fmtPace(bestRun.average_speed)+' /km':'—', body: bestRun?`${bestRun.name} · ${fmtDist(bestRun.distance)}`:'No runs yet', c:'var(--green)' },
+    { icon:'📏', title:'Longest run', val: longestRun?fmtDist(longestRun.distance):'—', body: longestRun?`${longestRun.name} · ${fmtDate(longestRun.start_date_local)}`:'No runs yet', c:'var(--blue)' },
+    { icon:'💀', title:'Hardest effort', val: mostSuffer?Math.round(mostSuffer.suffer_score):'—', body: mostSuffer?`${mostSuffer.name} · ${fmtDate(mostSuffer.start_date_local)}`:'—', c:'var(--accent)' },
+    { icon:'❤️', title:'Avg heart rate', val: meanHR?meanHR+' bpm':'—', body:`Across ${hrActs.length} activities with HR data`, c:'var(--red)' },
+    { icon:'📈', title:'Training load', val: loadTrend, body:`Recent 2-week suffer: ${Math.round(recentSuffer)} vs prior ${Math.round(olderSuffer)}`, c: recentSuffer>olderSuffer*1.3?'var(--accent)':'var(--green)' },
+    { icon:'🗓️', title:'Streak', val: calcStreak(acts)+' days', body:'Current consecutive active days', c:'var(--purple)' },
+  ].map(i=>`<div class="insight-card" style="--ic:${i.c}">
+    <div class="insight-icon">${i.icon}</div>
+    <div class="insight-title">${i.title}</div>
+    <div class="insight-value">${i.val}</div>
+    <div class="insight-body">${i.body}</div>
+  </div>`).join('');
+
+  // Monthly distance
+  const mMap={};
+  acts.forEach(a=>{ if(!a.distance) return; const k=a.start_date_local.slice(0,7); mMap[k]=(mMap[k]||0)+a.distance/1000; });
+  const months=Object.keys(mMap).sort().slice(-12);
+  const mlabels=months.map(m=>{const[y,mo]=m.split('-');return new Date(y,mo-1).toLocaleDateString('en-GB',{month:'short',year:'2-digit'});});
+  destroyChart('monthlyDist');
+  charts.monthlyDist = new Chart($('monthlyDistChart'),{
+    type:'bar',
+    data:{labels:mlabels,datasets:[{data:months.map(m=>+mMap[m].toFixed(1)),backgroundColor:'rgba(252,76,2,0.75)',borderRadius:4,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales()}
+  });
+
+  // Type donut
+  const tMap={};
+  acts.forEach(a=>{ const t=a.sport_type||a.type||'Other'; tMap[t]=(tMap[t]||0)+1; });
+  const tEntries=Object.entries(tMap).sort((a,b)=>b[1]-a[1]);
+  const tColors=['#fc4c02','#3dd68c','#a78bfa','#5b9cf6','#f59e0b','#f87171','#6e6e82','#38bdf8','#fb7185'];
+  destroyChart('typePie');
+  charts.typePie = new Chart($('typePieChart'),{
+    type:'doughnut',
+    data:{labels:tEntries.map(e=>e[0]),datasets:[{data:tEntries.map(e=>e[1]),backgroundColor:tColors,borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false}}}
+  });
+  $('type-legend').innerHTML=tEntries.map((e,i)=>`<span><span class="ldot" style="background:${tColors[i]}"></span>${e[0]} (${e[1]})</span>`).join('');
+
+  // Weekly volume
+  const wMap={};
+  acts.forEach(a=>{ const k=weekKey(a.start_date_local); if(!wMap[k]) wMap[k]={dist:0,time:0,count:0}; wMap[k].dist+=a.distance||0; wMap[k].time+=a.moving_time||0; wMap[k].count++; });
+  const weeks=Object.keys(wMap).sort().slice(-16);
+  destroyChart('weeklyVol');
+  charts.weeklyVol = new Chart($('weeklyVolumeChart'),{
+    type:'bar',
+    data:{
+      labels:weeks.map(w=>{ const d=new Date(w); return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }),
+      datasets:[
+        {label:'Distance (km)',data:weeks.map(w=>(wMap[w].dist/1000).toFixed(1)),backgroundColor:'rgba(61,214,140,0.6)',borderRadius:3,yAxisID:'y'},
+        {label:'Activities',data:weeks.map(w=>wMap[w].count),type:'line',borderColor:'#fc4c02',backgroundColor:'rgba(252,76,2,0.1)',fill:true,tension:0.4,pointRadius:3,yAxisID:'y1'}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+      ...baseScales(),
+      y:{...baseScales().y,position:'left'},
+      y1:{ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont},grid:{display:false},position:'right'}
+    }}
+  });
+}
+
+function calcStreak(acts) {
+  if(!acts.length) return 0;
+  const days=new Set(acts.map(a=>a.start_date_local.slice(0,10)));
+  let streak=0, d=new Date();
+  d.setHours(0,0,0,0);
+  while(days.has(d.toISOString().slice(0,10))) { streak++; d.setDate(d.getDate()-1); }
+  return streak;
+}
+
+// ══════════════════════════════════════════
+// TRAINING LOAD
+// ══════════════════════════════════════════
+function renderLoad(acts) {
+  const sufferActs = acts.filter(a=>a.suffer_score&&a.start_date_local);
+  const sorted = [...sufferActs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
+
+  // Build daily suffer map
+  const dayMap={};
+  sorted.forEach(a=>{ const k=a.start_date_local.slice(0,10); dayMap[k]=(dayMap[k]||0)+(a.suffer_score||0); });
+
+  // ACWR: rolling 7d acute / 28d chronic
+  const dayKeys=Object.keys(dayMap).sort();
+  const acuteArr=[], chronicArr=[], labels=[];
+  const last20 = dayKeys.slice(-20);
+  last20.forEach(k=>{
+    const kDate=new Date(k);
+    const acute7 = dayKeys.filter(d=>{ const dd=new Date(d); return dd<=kDate&&dd>new Date(kDate-7*86400000); }).reduce((s,d)=>s+(dayMap[d]||0),0)/7;
+    const chronic28 = dayKeys.filter(d=>{ const dd=new Date(d); return dd<=kDate&&dd>new Date(kDate-28*86400000); }).reduce((s,d)=>s+(dayMap[d]||0),0)/28;
+    labels.push(new Date(k).toLocaleDateString('en-GB',{day:'numeric',month:'short'}));
+    acuteArr.push(+acute7.toFixed(1));
+    chronicArr.push(+chronic28.toFixed(1));
+  });
+
+  const totalSuffer=acts.reduce((s,a)=>s+(a.suffer_score||0),0);
+  const last7Acts=acts.filter(a=>new Date(a.start_date)>new Date(Date.now()-7*86400000));
+  const last7Suffer=last7Acts.reduce((s,a)=>s+(a.suffer_score||0),0);
+  const last28Acts=acts.filter(a=>new Date(a.start_date)>new Date(Date.now()-28*86400000));
+  const last28Suffer=last28Acts.reduce((s,a)=>s+(a.suffer_score||0),0);
+  const acwr = last28Suffer>0?(last7Suffer/(last28Suffer/4)).toFixed(2):0;
+  const acwrStatus = acwr<0.8?'Under-training':'Optimal range (0.8–1.3)';
+  const acwrColor = acwr>1.5?'var(--red)':acwr>1.3?'var(--accent)':acwr<0.8?'var(--blue)':'var(--green)';
+
+  $('load-metrics').innerHTML = [
+    {label:'7-day suffer', val:Math.round(last7Suffer), unit:'', c:'var(--accent)', sub:`${last7Acts.length} activities`},
+    {label:'28-day suffer', val:Math.round(last28Suffer), unit:'', c:'var(--blue)', sub:`${last28Acts.length} activities`},
+    {label:'ACWR ratio', val:acwr, unit:'', c:acwrColor, sub:acwrStatus},
+    {label:'All-time suffer', val:Math.round(totalSuffer).toLocaleString(), unit:'', c:'var(--purple)', sub:`across ${sufferActs.length} activities`},
+  ].map(m=>`<div class="metric-card" style="--c:${m.c}">
+    <div class="metric-label">${m.label}</div>
+    <div class="metric-value">${m.val}<span class="metric-unit">${m.unit}</span></div>
+    <div class="metric-sub">${m.sub}</div>
+  </div>`).join('');
+
+  // ACWR chart
+  destroyChart('acwr');
+  charts.acwr = new Chart($('acwrChart'),{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Acute (7d)',data:acuteArr,borderColor:'#fc4c02',backgroundColor:'rgba(252,76,2,0.08)',fill:true,tension:0.4,pointRadius:2,borderWidth:1.5},
+      {label:'Chronic (28d)',data:chronicArr,borderColor:'#5b9cf6',backgroundColor:'rgba(91,156,246,0.05)',fill:true,tension:0.4,pointRadius:2,borderWidth:1.5}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales('','Suffer score/day')}
+  });
+
+  // Suffer over time
+  const recentSuffer = [...sufferActs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date)).slice(-40);
+  destroyChart('sufferTime');
+  charts.sufferTime = new Chart($('sufferTimeChart'),{
+    type:'bar',
+    data:{
+      labels:recentSuffer.map(a=>fmtDate(a.start_date_local)),
+      datasets:[{data:recentSuffer.map(a=>a.suffer_score),
+        backgroundColor:recentSuffer.map(a=>a.suffer_score>300?'#f87171':a.suffer_score>100?'#fc4c02':a.suffer_score>30?'#f59e0b':'#3dd68c'),
+        borderRadius:3,borderSkipped:false}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales()}
+  });
+
+  // Heatmap
+  const hm=$('heatmap');
+  const weekKeys=Object.keys(dayMap).reduce((s,d)=>{ const k=weekKey(d); if(!s[k]) s[k]=0; s[k]+=dayMap[d]; return s; },{});
+  const wkArr=Object.entries(weekKeys).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12);
+  const maxW=Math.max(...wkArr.map(w=>w[1]),1);
+  hm.innerHTML=wkArr.map(([k,v])=>{
+    const opacity=Math.max(0.1,v/maxW);
+    const d=new Date(k);
+    return `<div title="${d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} — suffer: ${Math.round(v)}" style="flex:1;min-width:40px;background:rgba(252,76,2,${opacity.toFixed(2)});border-radius:6px;padding:6px 4px;text-align:center;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.6);">${d.toLocaleDateString('en-GB',{month:'short',day:'numeric'})}</div>
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.9);margin-top:2px;">${Math.round(v)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+// PACE
+// ══════════════════════════════════════════
+function renderPace(acts) {
+  const runs = acts.filter(a=>isRun(a)&&a.distance>0&&a.average_speed>0);
+  if(!runs.length) { $('pace-metrics').innerHTML='<p style="color:var(--muted);font-size:13px;">No run data available.</p>'; return; }
+
+  const paces = runs.map(a=>1/a.average_speed*1000/60);
+  const avgPace = paces.reduce((s,v)=>s+v,0)/paces.length;
+  const bestPace = Math.min(...paces);
+  const longestRun = Math.max(...runs.map(a=>a.distance));
+  const totalRunDist = runs.reduce((s,a)=>s+(a.distance||0),0);
+  const recentRuns = runs.slice(0,5);
+  const olderRuns = runs.slice(5,10);
+  const recentAvgPace = recentRuns.length ? recentRuns.reduce((s,a)=>s+1/a.average_speed*1000/60,0)/recentRuns.length : 0;
+  const olderAvgPace = olderRuns.length ? olderRuns.reduce((s,a)=>s+1/a.average_speed*1000/60,0)/olderRuns.length : 0;
+  const improving = recentAvgPace < olderAvgPace;
+
+  const fmtPaceVal = spm => { const m=Math.floor(spm),s=Math.round((spm-m)*60); return `${m}:${s.toString().padStart(2,'0')}`; };
+
+  $('pace-metrics').innerHTML = [
+    {label:'Avg pace', val:fmtPaceVal(avgPace), unit:'/km', c:'var(--green)', sub:`${runs.length} runs`},
+    {label:'Best pace', val:fmtPaceVal(bestPace), unit:'/km', c:'var(--accent)', sub:'fastest average'},
+    {label:'Longest run', val:(longestRun/1000).toFixed(1), unit:'km', c:'var(--blue)', sub:'single activity'},
+    {label:'Total run dist', val:(totalRunDist/1000).toFixed(0), unit:'km', c:'var(--purple)', sub:'all time'},
+    {label:'Pace trend', val:improving?'↑ Improving':'→ Steady', unit:'', c:improving?'var(--green)':'var(--amber)', sub:'vs previous 5 runs'},
+  ].map(m=>`<div class="metric-card" style="--c:${m.c}">
+    <div class="metric-label">${m.label}</div>
+    <div class="metric-value">${m.val}<span class="metric-unit">${m.unit}</span></div>
+    <div class="metric-sub">${m.sub}</div>
+  </div>`).join('');
+
+  // Pace trend line
+  const sortedRuns = [...runs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
+  destroyChart('paceTrend');
+  charts.paceTrend = new Chart($('paceTrendChart'),{
+    type:'line',
+    data:{
+      labels:sortedRuns.map(a=>fmtDate(a.start_date_local)),
+      datasets:[{
+        data:sortedRuns.map(a=>+(1/a.average_speed*1000/60).toFixed(2)),
+        borderColor:'#3dd68c',backgroundColor:'rgba(61,214,140,0.08)',fill:true,tension:0.3,pointRadius:3,borderWidth:1.5
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{...baseScales('','min/km'),y:{...baseScales().y,reverse:true}}}
+  });
+
+  // Distance distribution
+  const bins = [0,5,10,15,21,42,Infinity];
+  const binLabels = ['0–5km','5–10km','10–15km','15–21km','21–42km','42km+'];
+  const binCounts = new Array(6).fill(0);
+  runs.forEach(a=>{ const km=a.distance/1000; for(let i=0;i<bins.length-1;i++) { if(km>=bins[i]&&km<bins[i+1]) { binCounts[i]++; break; } } });
+  destroyChart('distDist');
+  charts.distDist = new Chart($('distDistChart'),{
+    type:'bar',
+    data:{labels:binLabels,datasets:[{data:binCounts,backgroundColor:'rgba(91,156,246,0.7)',borderRadius:4,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales()}
+  });
+
+  // Fastest runs
+  const fastest = [...runs].sort((a,b)=>a.average_speed-b.average_speed>0?1:-1).reverse().slice(0,8);
+  const maxSpeed = fastest[0]?.average_speed||1;
+  $('fastest-runs').innerHTML = fastest.map(a=>{
+    const pace = 1/a.average_speed*1000/60;
+    return `<div class="pace-bar-wrap">
+      <div class="pace-name" title="${a.name}">${a.name}</div>
+      <div class="pace-bar-bg"><div class="pace-bar" style="width:${(a.average_speed/maxSpeed*100).toFixed(0)}%"></div></div>
+      <div class="pace-val">${fmtPaceVal(pace)}/km</div>
+    </div>`;
+  }).join('');
+
+  // Pace vs distance scatter
+  destroyChart('paceScatter');
+  charts.paceScatter = new Chart($('paceScatterChart'),{
+    type:'scatter',
+    data:{datasets:[{
+      data:runs.map(a=>({x:+(a.distance/1000).toFixed(2), y:+(1/a.average_speed*1000/60).toFixed(2)})),
+      backgroundColor:'rgba(252,76,2,0.5)',pointRadius:5,pointHoverRadius:7
+    }]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{...baseScales('Distance (km)','Pace (min/km)'),y:{...baseScales().y,reverse:true}}}
+  });
+}
+
+// ══════════════════════════════════════════
+// HEART RATE
+// ══════════════════════════════════════════
+function renderHR(acts) {
+  const hrActs = acts.filter(a=>a.average_heartrate);
+  if(!hrActs.length) { $('hr-metrics').innerHTML='<p style="color:var(--muted);font-size:13px;">No HR data available.</p>'; return; }
+
+  const avgHR = Math.round(hrActs.reduce((s,a)=>s+a.average_heartrate,0)/hrActs.length);
+  const maxHR = Math.max(...hrActs.map(a=>a.max_heartrate||0));
+  const restHR = Math.min(...hrActs.map(a=>a.average_heartrate));
+  const maxHRAct = hrActs.find(a=>a.max_heartrate===maxHR);
+  const runs = hrActs.filter(isRun);
+  const avgRunHR = runs.length ? Math.round(runs.reduce((s,a)=>s+a.average_heartrate,0)/runs.length) : 0;
+
+  $('hr-metrics').innerHTML = [
+    {label:'Avg heart rate', val:avgHR, unit:'bpm', c:'var(--red)', sub:`${hrActs.length} activities`},
+    {label:'Max recorded', val:maxHR, unit:'bpm', c:'var(--accent)', sub:maxHRAct?maxHRAct.name.slice(0,20):'—'},
+    {label:'Lowest avg HR', val:Math.round(restHR), unit:'bpm', c:'var(--blue)', sub:'most relaxed activity'},
+    {label:'Avg run HR', val:avgRunHR||'—', unit:avgRunHR?'bpm':'', c:'var(--green)', sub:`${runs.length} runs`},
+  ].map(m=>`<div class="metric-card" style="--c:${m.c}">
+    <div class="metric-label">${m.label}</div>
+    <div class="metric-value">${m.val}<span class="metric-unit">${m.unit}</span></div>
+    <div class="metric-sub">${m.sub}</div>
+  </div>`).join('');
+
+  // HR Zones (estimate based on % of max HR)
+  const zoneThresholds = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+  const zoneNames = ['Z1 Recovery','Z2 Aerobic','Z3 Tempo','Z4 Threshold','Z5 VO2 Max'];
+  const zoneColors = ['#3dd68c','#5b9cf6','#f59e0b','#fc4c02','#f87171'];
+  const zoneCounts = new Array(5).fill(0);
+  hrActs.forEach(a=>{
+    const pct = a.average_heartrate/maxHR;
+    for(let i=0;i<5;i++) { if(pct>=zoneThresholds[i]&&pct<zoneThresholds[i+1]) { zoneCounts[i]++; break; } }
+  });
+  const maxZone = Math.max(...zoneCounts,1);
+  $('hr-zones').innerHTML = zoneNames.map((z,i)=>`
+    <div class="zone-row">
+      <span class="zone-label">${z}</span>
+      <div class="zone-bar-bg"><div class="zone-bar" style="width:${(zoneCounts[i]/maxZone*100).toFixed(0)}%;background:${zoneColors[i]};"></div></div>
+      <span class="zone-count">${zoneCounts[i]}</span>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;padding-left:80px;">${Math.round(maxHR*zoneThresholds[i])}–${Math.round(maxHR*zoneThresholds[i+1])} bpm</div>
+  `).join('');
+
+  // HR trend
+  const sorted = [...hrActs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
+  destroyChart('hrTrend');
+  charts.hrTrend = new Chart($('hrTrendChart'),{
+    type:'line',
+    data:{
+      labels:sorted.map(a=>fmtDate(a.start_date_local)),
+      datasets:[{
+        data:sorted.map(a=>Math.round(a.average_heartrate)),
+        borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.08)',fill:true,tension:0.3,pointRadius:2,borderWidth:1.5
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales('','bpm')}
+  });
+
+  // Max HR by type
+  const typeHR={};
+  hrActs.forEach(a=>{ const t=a.sport_type||a.type||'Other'; if(!typeHR[t]) typeHR[t]=[]; typeHR[t].push(a.max_heartrate||a.average_heartrate); });
+  const typeEntries=Object.entries(typeHR).map(([t,v])=>([t,Math.round(v.reduce((s,x)=>s+x,0)/v.length)])).sort((a,b)=>b[1]-a[1]);
+  destroyChart('hrType');
+  charts.hrType = new Chart($('hrTypeChart'),{
+    type:'bar',
+    data:{
+      labels:typeEntries.map(e=>e[0]),
+      datasets:[{data:typeEntries.map(e=>e[1]),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:4,borderSkipped:false}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{...baseScales('','bpm'),y:{...baseScales().y,min:80}}}
+  });
+
+  // HR vs suffer scatter
+  const bothActs = hrActs.filter(a=>a.suffer_score);
+  destroyChart('hrSuffer');
+  charts.hrSuffer = new Chart($('hrSufferChart'),{
+    type:'scatter',
+    data:{datasets:[{
+      data:bothActs.map(a=>({x:Math.round(a.average_heartrate),y:Math.round(a.suffer_score)})),
+      backgroundColor:'rgba(252,76,2,0.5)',pointRadius:5
+    }]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales('Avg HR (bpm)','Suffer score')}
+  });
+}
+
+// ══════════════════════════════════════════
+// ALL ACTIVITIES TABLE
+// ══════════════════════════════════════════
+function renderActivities(acts) {
+  const types=[...new Set(acts.map(a=>a.sport_type||a.type))];
+  $('act-filters').innerHTML=`<button class="fbtn active" onclick="filterActs('all',this)">All (${acts.length})</button>`+
+    types.map(t=>`<button class="fbtn" onclick="filterActs('${t}',this)">${t} (${acts.filter(a=>(a.sport_type||a.type)===t).length})</button>`).join('');
+  renderActTable(acts);
+}
+
+function filterActs(type, btn) {
+  document.querySelectorAll('#act-filters .fbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = type==='all'?allActs:allActs.filter(a=>(a.sport_type||a.type)===type);
+  renderActTable(filtered);
+}
+
+// ══════════════════════════════════════════
+// COACHING
+// ══════════════════════════════════════════
+function renderCoaching(acts) {
+  const RACE_DATE = new Date('2026-07-03');
+  const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+  const daysToRace = Math.ceil((RACE_DATE - TODAY) / 86400000);
+  const weeksToRace = (daysToRace / 7).toFixed(1);
+
+  // Phase logic
+  let phase, phaseColor, phaseBg;
+  if (daysToRace > 21) { phase = 'Build phase'; phaseColor = '#3dd68c'; phaseBg = 'rgba(61,214,140,0.12)'; }
+  else if (daysToRace > 10) { phase = 'Peak phase'; phaseColor = '#f59e0b'; phaseBg = 'rgba(245,158,11,0.12)'; }
+  else if (daysToRace > 3) { phase = '⚡ Taper phase'; phaseColor = '#fc4c02'; phaseBg = 'rgba(252,76,2,0.12)'; }
+  else { phase = '🏁 Race week!'; phaseColor = '#f87171'; phaseBg = 'rgba(248,113,113,0.12)'; }
+
+  // Data analysis
+  const runs = acts.filter(a => isRun(a) && a.distance > 0);
+  const last7Acts = acts.filter(a => new Date(a.start_date) > new Date(Date.now() - 7*86400000));
+  const last14Acts = acts.filter(a => new Date(a.start_date) > new Date(Date.now() - 14*86400000));
+  const last28Acts = acts.filter(a => new Date(a.start_date) > new Date(Date.now() - 28*86400000));
+  const last7Suffer = last7Acts.reduce((s,a)=>s+(a.suffer_score||0),0);
+  const last28Suffer = last28Acts.reduce((s,a)=>s+(a.suffer_score||0),0);
+  const acwr = last28Suffer > 0 ? (last7Suffer / (last28Suffer/4)) : 0;
+
+  const last7RunDist = last7Acts.filter(isRun).reduce((s,a)=>s+(a.distance||0),0)/1000;
+  const last14RunDist = last14Acts.filter(isRun).reduce((s,a)=>s+(a.distance||0),0)/1000;
+  const longestRun = Math.max(...runs.map(a=>a.distance/1000), 0);
+  const recentRuns = runs.slice(0,5);
+  const avgPaceSec = recentRuns.length ? recentRuns.reduce((s,a)=>s+(1/a.average_speed*1000),0)/recentRuns.length : 0;
+
+  const hrActs = acts.filter(a=>a.average_heartrate);
+  const avgHR = hrActs.length ? Math.round(hrActs.reduce((s,a)=>s+a.average_heartrate,0)/hrActs.length) : 0;
+  const maxHRever = Math.max(...hrActs.map(a=>a.max_heartrate||0));
+  const z2Max = Math.round(maxHRever * 0.7);
+  const z2Min = Math.round(maxHRever * 0.6);
+
+  const restDays7 = 7 - last7Acts.length;
+  const trailRuns = acts.filter(a => (a.sport_type||a.type||'').toLowerCase().includes('trail'));
+  const totalActs = acts.length;
+
+  // Format pace helper
+  const fmtSec = s => { const m=Math.floor(s/60),sec=Math.round(s%60); return `${m}:${sec.toString().padStart(2,'0')}`; };
+
+  // ── Race countdown banner ────────────────────────────
+  const bannerHTML = `
+  <div class="race-banner">
+    <div>
+      <div class="race-banner-title">🏔️ Echo Trails Run</div>
+      <div class="race-banner-sub">July 3, 2026 · ${weeksToRace} weeks away · <span class="phase-badge" style="background:${phaseBg};color:${phaseColor};">${phase}</span></div>
+    </div>
+    <div style="text-align:center;">
+      <div class="countdown-days">${daysToRace}</div>
+      <div class="countdown-label">days to go</div>
+    </div>
+  </div>`;
+
+  // ── Week plan ────────────────────────────────────────
+  const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const todayDow = TODAY.getDay(); // 0=Sun
+  const mondayOffset = todayDow === 0 ? -6 : 1 - todayDow;
+  const weekDays = Array.from({length:7}, (_,i) => {
+    const d = new Date(TODAY); d.setDate(TODAY.getDate() + mondayOffset + i);
+    return d;
+  });
+
+  // Tomorrow = training run day
+  const tomorrowDate = new Date(TODAY); tomorrowDate.setDate(TODAY.getDate()+1);
+
+  const dayPlans = weekDays.map(d => {
+    const isToday = d.toDateString() === TODAY.toDateString();
+    const isTomorrow = d.toDateString() === tomorrowDate.toDateString();
+    const isRaceDay = d.toDateString() === RACE_DATE.toDateString();
+    const dow = d.getDay();
+    let type = '', detail = '', color = 'var(--muted)';
+
+    if (isRaceDay) { type = '🏁 RACE'; detail = 'Echo Trails'; color = 'var(--amber)'; }
+    else if (isTomorrow) { type = '🏃 Run'; detail = '10km trail\neasy pace'; color = 'var(--green)'; }
+    else if (isToday) { type = '😴 Rest'; detail = 'Pre-run\nrecovery'; color = 'var(--blue)'; }
+    else if (dow === 6) { type = '🏋️ Strength'; detail = 'Upper body\nor cross-train'; color = 'var(--purple)'; }
+    else if (dow === 0) { type = '😴 Rest'; detail = 'Active\nrecovery'; color = 'var(--muted)'; }
+    else if (dow === 3) { type = '🏃 Run'; detail = daysToRace > 14 ? '8–12km\ntempo' : '6km\neasy'; color = 'var(--green)'; }
+    else if (dow === 5) { type = '🏃 Long'; detail = daysToRace > 14 ? '15–18km\nz2 pace' : '10km\nrace pace'; color = 'var(--accent)'; }
+    else { type = '🏋️ Gym'; detail = 'Weight\ntraining'; color = 'var(--purple)'; }
+
+    const cls = isToday ? 'today' : isRaceDay ? 'race-day' : '';
+    return `<div class="day-cell ${cls}">
+      <div class="day-name">${dayNames[(d.getDay()+6)%7]}</div>
+      <div class="day-name" style="color:var(--muted);font-size:8px;">${d.getDate()}/${d.getMonth()+1}</div>
+      <div class="day-type" style="color:${color};margin-top:4px;">${type}</div>
+      <div class="day-detail">${detail}</div>
+    </div>`;
+  });
+
+  // ── Readiness score ──────────────────────────────────
+  let readiness = 70;
+  if (acwr >= 0.8 && acwr <= 1.3) readiness += 15;
+  else if (acwr > 1.5) readiness -= 20;
+  if (longestRun >= 18) readiness += 10;
+  else if (longestRun >= 12) readiness += 5;
+  if (trailRuns.length >= 3) readiness += 5;
+  readiness = Math.min(100, Math.max(10, readiness));
+  const readColor = readiness >= 80 ? 'var(--green)' : readiness >= 60 ? 'var(--amber)' : 'var(--red)';
+
+  // ── Advice cards ─────────────────────────────────────
+  const adviceCards = [];
+
+  // Tomorrow's run
+  adviceCards.push({
+    icon: '🏃', title: "Tomorrow's training run", priority: 'high', ac: 'var(--green)',
+    body: `You're heading to the Echo Trails location for a <strong>10km training run</strong> — perfect timing. 
+    Run at an <strong>easy to moderate effort (Z2–Z3)</strong>, targeting ${fmtSec(avgPaceSec > 0 ? avgPaceSec * 1.08 : 360)}–${fmtSec(avgPaceSec > 0 ? avgPaceSec * 1.15 : 390)} /km. 
+    Focus on <strong>terrain familiarisation</strong>, not pace. Note the elevation profile and any technical sections. 
+    Keep HR under <strong>${Math.round(maxHRever * 0.78)} bpm</strong>. Carry water and fuel.`
+  });
+
+  // Load warning or green light
+  if (acwr > 1.4) {
+    adviceCards.push({
+      icon: '⚠️', title: 'Training load — caution', priority: 'high', ac: 'var(--accent)',
+      body: `Your ACWR is <strong>${acwr.toFixed(2)}</strong> — above the safe zone (0.8–1.3). 
+      You've done <strong>${last7Acts.length} activities</strong> in the last 7 days with suffer score <strong>${Math.round(last7Suffer)}</strong>. 
+      With ${daysToRace} days to race, avoid adding volume. Prioritise <strong>quality over quantity</strong> this week.`
+    });
+  } else if (acwr < 0.7) {
+    adviceCards.push({
+      icon: '📉', title: 'Training load — low', priority: 'med', ac: 'var(--blue)',
+      body: `Your recent load is lighter than ideal (ACWR: <strong>${acwr.toFixed(2)}</strong>). With ${daysToRace} days to race, 
+      you have time to build slightly. Aim for <strong>${daysToRace > 14 ? '3–4 sessions' : '2–3 sessions'} this week</strong> 
+      including tomorrow's trail run. Don't spike volume — gradual is key.`
+    });
+  } else {
+    adviceCards.push({
+      icon: '✅', title: 'Training load — on track', priority: 'low', ac: 'var(--green)',
+      body: `ACWR is <strong>${acwr.toFixed(2)}</strong> — right in the optimal zone. You're training smart. 
+      Last 7 days: <strong>${last7Acts.length} activities, ${last7RunDist.toFixed(1)}km running</strong>. 
+      Keep this rhythm through ${daysToRace > 14 ? 'the build phase' : 'taper'} and you'll arrive at the start line fresh.`
+    });
+  }
+
+  // Longest run readiness
+  if (longestRun < 15 && daysToRace > 14) {
+    adviceCards.push({
+      icon: '📏', title: 'Long run needed', priority: 'high', ac: 'var(--accent)',
+      body: `Your longest run to date is <strong>${longestRun.toFixed(1)}km</strong>. Before Echo Trails you should complete at least 
+      one run of <strong>18–21km</strong> to build confidence for the race distance. 
+      Schedule it <strong>this weekend or next</strong>, leaving 10+ days for taper. Keep it at Z2 pace — effort, not speed.`
+    });
+  } else if (longestRun >= 15) {
+    adviceCards.push({
+      icon: '💪', title: 'Long run base — solid', priority: 'low', ac: 'var(--green)',
+      body: `Your longest run is <strong>${longestRun.toFixed(1)}km</strong> — a solid base for the trail race. 
+      ${daysToRace > 14 ? 'Consider one more long run of 18–20km before tapering.' : 'You\'re in taper territory now — no new long efforts needed.'} 
+      Trust your training and focus on recovery and sharpness.`
+    });
+  }
+
+  // HR zone advice
+  if (avgHR > 0) {
+    adviceCards.push({
+      icon: '❤️', title: 'Heart rate strategy', priority: 'med', ac: 'var(--red)',
+      body: `Your avg HR across activities is <strong>${avgHR} bpm</strong>. For a trail run, starting conservatively saves you on the climbs. 
+      Target <strong>Z2 (${z2Min}–${z2Max} bpm)</strong> on flats and uphills — let HR drift, don't chase pace up hills. 
+      Your max recorded is <strong>${maxHRever} bpm</strong> — you have headroom for the final push.`
+    });
+  }
+
+  // Taper advice
+  if (daysToRace <= 14) {
+    adviceCards.push({
+      icon: '🧘', title: 'Taper begins now', priority: 'high', ac: 'var(--amber)',
+      body: `With <strong>${daysToRace} days to race</strong> you should be tapering. Reduce weekly volume by <strong>30–40%</strong> 
+      but keep intensity. 2–3 short runs this week, one with <strong>race-pace efforts (3–4 x 1km)</strong>. 
+      Last run before race: <strong>3 days out max</strong>. Prioritise sleep, hydration and carb loading from 2 days out.`
+    });
+  }
+
+  // Trail experience
+  adviceCards.push({
+    icon: '🏔️', title: 'Trail-specific prep', priority: trailRuns.length < 3 ? 'high' : 'med', ac: 'var(--purple)',
+    body: `You have <strong>${trailRuns.length} trail runs</strong> logged. 
+    ${trailRuns.length < 3 ? 'Tomorrow\'s run at the Echo Trails location is crucial — get comfortable on the terrain.' : 'Good trail experience. Tomorrow focus on technical sections and downhill running form.'} 
+    On race day: <strong>hike steep uphills</strong> (even elites do), run all downhills, and <strong>eat before you're hungry, drink before you're thirsty</strong>.`
+  });
+
+  // Race day tips
+  adviceCards.push({
+    icon: '🎯', title: 'Race day strategy', priority: 'med', ac: 'var(--blue)',
+    body: `Start <strong>conservatively — the first 3km should feel easy</strong>. You'll thank yourself at km 8. 
+    Nutrition: take a gel or snack every <strong>45–60 minutes</strong>. Carry at least <strong>500ml water</strong>. 
+    Don't wear new shoes or gear on race day. 
+    Night before: <strong>lay out all gear, sleep 8hrs, light carb meal</strong>.`
+  });
+
+  // ── Render ───────────────────────────────────────────
+  $('tab-coaching').innerHTML = `
+    ${bannerHTML}
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">This week's plan</div>
+      <div class="week-plan">${weekDays.map((_,i)=>dayPlans[i]).join('')}</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Race readiness score</div>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+        <div style="font-family:'Outfit',sans-serif;font-size:52px;font-weight:800;color:${readColor};letter-spacing:-2px;">${readiness}<span style="font-size:24px;color:var(--muted);">/100</span></div>
+        <div style="flex:1;min-width:200px;">
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Longest run</span><span>${longestRun.toFixed(1)}km / 21km target</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:${Math.min(100,(longestRun/21*100)).toFixed(0)}%;background:var(--green);"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Trail runs logged</span><span>${trailRuns.length} / 5 recommended</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:${Math.min(100,(trailRuns.length/5*100)).toFixed(0)}%;background:var(--blue);"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Load balance (ACWR)</span><span>${acwr.toFixed(2)} ${acwr>=0.8&&acwr<=1.3?'✓ optimal':'⚠️ adjust'}</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:${Math.min(100,acwr/1.3*100).toFixed(0)}%;background:${acwr>1.4?'var(--accent)':'var(--green)'};"></div></div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-label"><span>Weekly consistency</span><span>${last28Acts.length} acts in 28 days</span></div>
+            <div class="progress-bg"><div class="progress-fill" style="width:${Math.min(100,(last28Acts.length/16*100)).toFixed(0)}%;background:var(--purple);"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="advice-grid">
+      ${adviceCards.map(c=>`
+        <div class="advice-card" style="--ac:${c.ac}">
+          <div class="advice-card-header">
+            <span class="advice-icon">${c.icon}</span>
+            <span class="advice-title">${c.title}</span>
+            <span class="advice-priority p-${c.priority}">${c.priority}</span>
+          </div>
+          <div class="advice-body">${c.body}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderActTable(acts) {
+  const tbody=$('act-tbody');
+  if(!acts.length) { tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem;">No activities.</td></tr>`; return; }
+  tbody.innerHTML = acts.map(a=>{
+    const type=a.sport_type||a.type||'Other';
+    const pace = isRun(a)&&a.average_speed>0 ? fmtPace(a.average_speed) : isRide(a)&&a.average_speed>0 ? `${(a.average_speed*3.6).toFixed(1)} km/h` : '—';
+    return `<tr>
+      <td style="color:var(--muted);white-space:nowrap;">${fmtDate(a.start_date_local)}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.name}</td>
+      <td><span class="badge ${badgeClass(type)}">${type}</span></td>
+      <td>${fmtDist(a.distance)}</td>
+      <td style="color:var(--muted);">${fmtTime(a.moving_time)}</td>
+      <td style="color:var(--muted2);">${pace}</td>
+      <td>${a.average_heartrate?Math.round(a.average_heartrate)+' bpm':'—'}</td>
+      <td>${a.max_heartrate?Math.round(a.max_heartrate)+' bpm':'—'}</td>
+      <td>${a.total_elevation_gain?Math.round(a.total_elevation_gain)+'m':'—'}</td>
+      <td>${a.suffer_score?`<span class="suffer-pill ${sufferClass(a.suffer_score)}">${Math.round(a.suffer_score)}</span>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+</script>
+
+
+<use-chat-gpt-ai id="USE_CHAT_GPT_AI_ROOT" class="close" data-version="8.37.2" style="transition: 0.1s ease-in-out;"><template shadowrootmode="open"><style><style data-emotion="use-chat-gpt-ai-emotion-cache" data-s=""></style></style><div id="USE_CHAT_GPT_AI_ROOT_Wrapper" translate="no" style="display: flex; flex-direction: column; flex: 1 1 0%; height: 100vh; text-align: left;"><div style="position: relative; user-select: auto; width: 520px; height: 100%; max-width: 1216px; min-width: 480px; box-sizing: border-box; flex-shrink: 0;"><div><div class="" style="position: absolute; user-select: none; width: 10px; height: 100%; top: 0px; left: -5px; cursor: col-resize;"></div></div><div class="use-chat-gpt-ai-app use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-emotion-cache-rxnue0"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-1cc178e"></div></div><div></div></div></div><link rel="stylesheet" href="chrome-extension://mhnlakgilnojmhinhkckjpncpbhabphi/content_style.css"></template></use-chat-gpt-ai><use-chat-gpt-ai-content-menu id="USE_CHAT_GPT_AI_ROOT_Context_Menu"><template shadowrootmode="open"><div id="USE_CHAT_GPT_AI_ROOT_Context_Menu_Portal"><div class="use-chat-gpt-ai--MuiStack-root maxai--chat-hub use-chat-gpt-ai-context-menu-govllc"><div class="use-chat-gpt-ai--MuiStack-root maxai-client--chat-hub--container use-chat-gpt-ai-context-menu-vnifk2"><div class="max-ai__click-context-menu close use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-xsjeto"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-cskh5k"><div class="use-chat-gpt-ai--MuiStack-root mini-icon-button use-chat-gpt-ai-context-menu-13qilsq" id="max_ai__floating_context_menu__mini_hide_button"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-sx8eqy"></div></div></div></div><div class="use-chat-gpt-ai--MuiStack-root MAX_AI_FLOATING_IMAGE_MINI_MENU use-chat-gpt-ai-context-menu-bobu9h"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-1hv2nti"><div class="max_ai_floating_image_dot_button use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-g85zgq"></div></div><div class="use-chat-gpt-ai--MuiStack-root max_ai_floating_image_text_button use-chat-gpt-ai-context-menu-1x7opeu"><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai-context-menu-vdqo2x" tabindex="0" type="button"><span class="use-chat-gpt-ai--MuiButton-icon use-chat-gpt-ai--MuiButton-startIcon use-chat-gpt-ai--MuiButton-iconSizeMedium use-chat-gpt-ai-context-menu-1l6c7y9"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-uvbgop" focusable="false" aria-hidden="true" viewBox="0 0 33 32" width="33" height="32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M26.3112 11.493L24.5228 7.55842L20.5882 5.76996L24.5228 3.98149L26.3112 0.046875L28.0997 3.98149L32.0343 5.76996L28.0997 7.55842L26.3112 11.493ZM26.3112 31.5238L24.5228 27.5892L20.5882 25.8007L24.5228 24.0123L26.3112 20.0777L28.0997 24.0123L32.0343 25.8007L28.0997 27.5892L26.3112 31.5238ZM12.0035 27.2315L8.42661 19.3623L0.557373 15.7854L8.42661 12.2084L12.0035 4.33919L15.5805 12.2084L23.4497 15.7854L15.5805 19.3623L12.0035 27.2315Z" fill="currentColor"></path></svg></span><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-3qrz66"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1ij5uka">Ask about this image</div></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></button><hr class="use-chat-gpt-ai--MuiDivider-root use-chat-gpt-ai--MuiDivider-fullWidth use-chat-gpt-ai--MuiDivider-vertical use-chat-gpt-ai-context-menu-1tcja4"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-1u66iyf"><span class=""><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation maxai_close_button use-chat-gpt-ai-context-menu-mv5e1j" tabindex="0" type="button"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-1hudmqv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="CloseOutlinedIcon"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></button></span><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation maxai_more_close_options use-chat-gpt-ai-context-menu-imxy6q" tabindex="0" type="button"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-1b6mqyd" focusable="false" aria-hidden="true" viewBox="0 0 18 18" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.00009 1.5V9M13.7701 4.98C14.7139 5.92409 15.3565 7.12683 15.6168 8.43614C15.8771 9.74545 15.7433 11.1025 15.2323 12.3358C14.7214 13.5691 13.8562 14.6232 12.7462 15.3648C11.6362 16.1064 10.3313 16.5022 8.99634 16.5022C7.66141 16.5022 6.35645 16.1064 5.24647 15.3648C4.13649 14.6232 3.27132 13.5691 2.76036 12.3358C2.24941 11.1025 2.11561 9.74545 2.37588 8.43614C2.63615 7.12683 3.27881 5.92409 4.22259 4.98" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg><div class="maxai__floating_image_menu__close_menu use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1oflqog"><div class="use-chat-gpt-ai--MuiList-root use-chat-gpt-ai--MuiList-padding use-chat-gpt-ai-context-menu-8p2j1e"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-2rlxtj"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1mp307" data-button-clicked-name="max_ai__floating_image_menu__hide_menu__this_site" role="menuitem"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-0"><span class=""><div class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai-context-menu-yxgj72" tabindex="0" role="button"><div class="use-chat-gpt-ai--MuiListItemText-root use-chat-gpt-ai-context-menu-b9edmv"><span class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai--MuiListItemText-primary use-chat-gpt-ai-context-menu-1g0a3y9">Hide on this site</span></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></div></span></div></div><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1mp307" data-button-clicked-name="max_ai__floating_image_menu__hide_menu__all_sites" role="menuitem"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-0"><span class=""><div class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai-context-menu-yxgj72" tabindex="0" role="button"><div class="use-chat-gpt-ai--MuiListItemText-root use-chat-gpt-ai-context-menu-b9edmv"><span class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai--MuiListItemText-primary use-chat-gpt-ai-context-menu-1g0a3y9">Hide always</span></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></div></span></div></div></div><hr class="use-chat-gpt-ai--MuiDivider-root use-chat-gpt-ai--MuiDivider-fullWidth use-chat-gpt-ai-context-menu-1px5dlw"><li class="use-chat-gpt-ai--MuiListItem-root use-chat-gpt-ai--MuiListItem-gutters use-chat-gpt-ai--MuiListItem-padding use-chat-gpt-ai-context-menu-1bh2m53"><div class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai-context-menu-yxgj72" tabindex="0" role="button"><div class="use-chat-gpt-ai--MuiListItemText-root use-chat-gpt-ai-context-menu-1tsvksn"><p class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai--MuiTypography-noWrap use-chat-gpt-ai-context-menu-jfjimq">You can re-enable it in <span class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai-context-menu-ssrda">Settings</span></p></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></div></li></div></div></button></div></div></div><div class="use-chat-gpt-ai--MuiStack-root MAX_AI_FLOATING_IMAGE_MINI_MENU use-chat-gpt-ai-context-menu-bobu9h" data-testid="maxai__floating_image_mini_menu__first_enter_image"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-1hv2nti"><div class="max_ai_floating_image_dot_button use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-g85zgq"></div></div><div class="use-chat-gpt-ai--MuiStack-root max_ai_floating_image_text_button use-chat-gpt-ai-context-menu-1x7opeu"><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai-context-menu-vdqo2x" tabindex="0" type="button"><span class="use-chat-gpt-ai--MuiButton-icon use-chat-gpt-ai--MuiButton-startIcon use-chat-gpt-ai--MuiButton-iconSizeMedium use-chat-gpt-ai-context-menu-1l6c7y9"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-uvbgop" focusable="false" aria-hidden="true" viewBox="0 0 33 32" width="33" height="32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M26.3112 11.493L24.5228 7.55842L20.5882 5.76996L24.5228 3.98149L26.3112 0.046875L28.0997 3.98149L32.0343 5.76996L28.0997 7.55842L26.3112 11.493ZM26.3112 31.5238L24.5228 27.5892L20.5882 25.8007L24.5228 24.0123L26.3112 20.0777L28.0997 24.0123L32.0343 25.8007L28.0997 27.5892L26.3112 31.5238ZM12.0035 27.2315L8.42661 19.3623L0.557373 15.7854L8.42661 12.2084L12.0035 4.33919L15.5805 12.2084L23.4497 15.7854L15.5805 19.3623L12.0035 27.2315Z" fill="currentColor"></path></svg></span><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-3qrz66"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1ij5uka">Ask about this image</div></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></button><hr class="use-chat-gpt-ai--MuiDivider-root use-chat-gpt-ai--MuiDivider-fullWidth use-chat-gpt-ai--MuiDivider-vertical use-chat-gpt-ai-context-menu-1tcja4"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-1u66iyf"><span class=""><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation maxai_close_button use-chat-gpt-ai-context-menu-mv5e1j" tabindex="0" type="button"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-1hudmqv" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="CloseOutlinedIcon"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></button></span><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation maxai_more_close_options use-chat-gpt-ai-context-menu-imxy6q" tabindex="0" type="button"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-1b6mqyd" focusable="false" aria-hidden="true" viewBox="0 0 18 18" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.00009 1.5V9M13.7701 4.98C14.7139 5.92409 15.3565 7.12683 15.6168 8.43614C15.8771 9.74545 15.7433 11.1025 15.2323 12.3358C14.7214 13.5691 13.8562 14.6232 12.7462 15.3648C11.6362 16.1064 10.3313 16.5022 8.99634 16.5022C7.66141 16.5022 6.35645 16.1064 5.24647 15.3648C4.13649 14.6232 3.27132 13.5691 2.76036 12.3358C2.24941 11.1025 2.11561 9.74545 2.37588 8.43614C2.63615 7.12683 3.27881 5.92409 4.22259 4.98" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg><div class="maxai__floating_image_menu__close_menu use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1oflqog"><div class="use-chat-gpt-ai--MuiList-root use-chat-gpt-ai--MuiList-padding use-chat-gpt-ai-context-menu-8p2j1e"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-2rlxtj"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1mp307" data-button-clicked-name="max_ai__floating_image_menu__hide_menu__this_site" role="menuitem"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-0"><span class=""><div class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai-context-menu-yxgj72" tabindex="0" role="button"><div class="use-chat-gpt-ai--MuiListItemText-root use-chat-gpt-ai-context-menu-b9edmv"><span class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai--MuiListItemText-primary use-chat-gpt-ai-context-menu-1g0a3y9">Hide on this site</span></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></div></span></div></div><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-1mp307" data-button-clicked-name="max_ai__floating_image_menu__hide_menu__all_sites" role="menuitem"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-0"><span class=""><div class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai-context-menu-yxgj72" tabindex="0" role="button"><div class="use-chat-gpt-ai--MuiListItemText-root use-chat-gpt-ai-context-menu-b9edmv"><span class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai--MuiListItemText-primary use-chat-gpt-ai-context-menu-1g0a3y9">Hide always</span></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></div></span></div></div></div><hr class="use-chat-gpt-ai--MuiDivider-root use-chat-gpt-ai--MuiDivider-fullWidth use-chat-gpt-ai-context-menu-1px5dlw"><li class="use-chat-gpt-ai--MuiListItem-root use-chat-gpt-ai--MuiListItem-gutters use-chat-gpt-ai--MuiListItem-padding use-chat-gpt-ai-context-menu-1bh2m53"><div class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai--MuiListItemButton-root use-chat-gpt-ai--MuiListItemButton-gutters use-chat-gpt-ai-context-menu-yxgj72" tabindex="0" role="button"><div class="use-chat-gpt-ai--MuiListItemText-root use-chat-gpt-ai-context-menu-1tsvksn"><p class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai--MuiTypography-noWrap use-chat-gpt-ai-context-menu-jfjimq">You can re-enable it in <span class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai-context-menu-ssrda">Settings</span></p></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-context-menu-w0pj6f"></span></div></li></div></div></button></div></div></div></div></div><div id=":r2:" data-floating-ui-portal=""><div id="USE_CHAT_GPT_AI_ROOT_Floating_Reference_Element" data-testid="maxai--floating-context-menu-reference-element" data-disabled-button-clicked="true" aria-hidden="true" tabindex="-1" data-floating-ui-focusable="" style="position: fixed; z-index: -1; opacity: 0; visibility: hidden; top: 8px; left: 8px; width: 736px; height: auto; max-height: 620px;"><div class="RootMenu use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-r1z76x" aria-expanded="false" aria-haspopup="menu" id=":rd:" style="height: auto; max-height: 620px;"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-vsc00s"></div><div class="use-chat-gpt-ai--MuiCollapse-root use-chat-gpt-ai--MuiCollapse-vertical use-chat-gpt-ai--MuiCollapse-hidden use-chat-gpt-ai-context-menu-a0y2e3" style="min-height: 0px; height: 0px; transition-duration: 300ms;"><div class="use-chat-gpt-ai--MuiCollapse-wrapper use-chat-gpt-ai--MuiCollapse-vertical use-chat-gpt-ai-context-menu-hboir5"><div class="use-chat-gpt-ai--MuiCollapse-wrapperInner use-chat-gpt-ai--MuiCollapse-vertical use-chat-gpt-ai-context-menu-8atqhb"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-10lg6vb"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-1p8uq3h" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="SubdirectoryArrowRightIcon"><path d="m19 15-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.58L13 9z"></path></svg><p class="use-chat-gpt-ai--MuiTypography-root use-chat-gpt-ai--MuiTypography-body1 use-chat-gpt-ai-context-menu-6en1db"></p></div></div></div></div><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-fq8o47"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-1atvgzm"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-16d8p9f"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-rxa6wc" style="height: 24px;"><div class="chat-box__input-skeleton use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-0"><span class="use-chat-gpt-ai--MuiSkeleton-root use-chat-gpt-ai--MuiSkeleton-text use-chat-gpt-ai--MuiSkeleton-pulse use-chat-gpt-ai-context-menu-i9ca5d" style="height: 24px;"></span></div><div class="chat-box__input—prefix use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-context-menu-8atqhb"></div><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-bwg2ii"><div class="use-chat-gpt-ai--MuiStack-root max-ai-user-input__expand use-chat-gpt-ai-context-menu-ec3zdl"></div><textarea id="USE_CHAT_GPT_AI_ROOT_Floating_Input" placeholder="" rows="1" data-min-line="1" style="height: 24px;"></textarea></div><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-context-menu-16zqen5"></div></div></div><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-contained use-chat-gpt-ai--MuiButton-containedPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-containedSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation Mui-disabled use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-contained use-chat-gpt-ai--MuiButton-containedPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-containedSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai-context-menu-1bad10s" tabindex="-1" type="button" disabled="" data-testid="sidebar_actions__send_btn"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-context-menu-vh04is" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="SendIcon"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button></div></div></div></div></div><div id=":re:" data-floating-ui-portal=""></div></div><style><style data-emotion="use-chat-gpt-ai-context-menu" data-s=""></style></style><link rel="stylesheet" href="chrome-extension://mhnlakgilnojmhinhkckjpncpbhabphi/content_style.css"></template></use-chat-gpt-ai-content-menu><use-chat-gpt-ai id="maxai-global-popup-container" translate="no"><template shadowrootmode="open"><div></div><style></style><link rel="stylesheet" href="chrome-extension://mhnlakgilnojmhinhkckjpncpbhabphi/content_style.css"></template></use-chat-gpt-ai><max-ai-minimum-app id="USE_CHAT_GPT_AI_ROOT_Minimize_Container" data-version="8.37.2"><template shadowrootmode="open"><style><style data-emotion="use-chat-gpt-ai-emotion-cache" data-s=""></style></style><div><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-emotion-cache-1p352da"><div class="react-draggable use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-emotion-cache-t1tl5f" data-testid="quick-access-maxai-mini-button-main" style="transform: translate(0px, 439px);"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-1nckq99"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-1ozjlsx"><div class="use-chat-gpt-ai--MuiBox-root use-chat-gpt-ai-emotion-cache-eh29y" type="quick-access"><div class="" style="position: absolute; top: 0px; right: 0px; width: var(--expanded-width); height: 100%; pointer-events: none; margin-right: calc(-1 * var(--middle-button-width) - 2px);"></div><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-1u8wwnc"><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai-emotion-cache-zmeedx" tabindex="0" type="button" data-testid="maxai__quick_access__open_sidebar_button"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-15yt36a" data-testid="quick-access-maxai-mini-button"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-hk91tw"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-emotion-cache-12h3apu" focusable="false" aria-hidden="true" viewBox="0 0 33 32" width="33" height="32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M26.3112 11.493L24.5228 7.55842L20.5882 5.76996L24.5228 3.98149L26.3112 0.046875L28.0997 3.98149L32.0343 5.76996L28.0997 7.55842L26.3112 11.493ZM26.3112 31.5238L24.5228 27.5892L20.5882 25.8007L24.5228 24.0123L26.3112 20.0777L28.0997 24.0123L32.0343 25.8007L28.0997 27.5892L26.3112 31.5238ZM12.0035 27.2315L8.42661 19.3623L0.557373 15.7854L8.42661 12.2084L12.0035 4.33919L15.5805 12.2084L23.4497 15.7854L15.5805 19.3623L12.0035 27.2315Z" fill="currentColor"></path></svg></div></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-emotion-cache-w0pj6f"></span></button><button class="use-chat-gpt-ai--MuiButtonBase-root use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai--MuiButton-root use-chat-gpt-ai--MuiButton-text use-chat-gpt-ai--MuiButton-textPrimary use-chat-gpt-ai--MuiButton-sizeMedium use-chat-gpt-ai--MuiButton-textSizeMedium use-chat-gpt-ai--MuiButton-colorPrimary use-chat-gpt-ai--MuiButton-disableElevation use-chat-gpt-ai-emotion-cache-7c4uys" tabindex="0" type="button" data-testid="maxai__quick_access__immersive_chat_button"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-jbupsw" data-testid="quick-access-maxai-immersive-chat-button"><svg class="use-chat-gpt-ai--MuiSvgIcon-root use-chat-gpt-ai--MuiSvgIcon-fontSizeMedium use-chat-gpt-ai-emotion-cache-w17z31" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="FullscreenOutlinedIcon"><path d="M7 14H5v5h5v-2H7zm-2-4h2V7h3V5H5zm12 7h-3v2h5v-5h-2zM14 5v2h3v3h2V5z"></path></svg></div><span class="use-chat-gpt-ai--MuiTouchRipple-root use-chat-gpt-ai-emotion-cache-w0pj6f"></span></button></div></div><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-6hi1hz"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-jakrt4"></div></div><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-1d7plg"><div class="use-chat-gpt-ai--MuiStack-root use-chat-gpt-ai-emotion-cache-15xa95t"></div></div></div></div></div></div></div></template></max-ai-minimum-app><div id="MAXAI_SNACKBAR_CONTAINER" style="z-index: 2147483647; color: rgb(255, 255, 255); position: absolute;"><span></span></div></body></html>
