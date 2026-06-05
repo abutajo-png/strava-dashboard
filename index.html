@@ -1195,24 +1195,55 @@ function toDateKey(dateStr) {
   return d;
 }
 
+// Trusted sources per metric
+const TRUSTED_SOURCES = {
+  sleep:  ['com.ouraring.oura'],
+  rhr:    ['com.ouraring.oura', 'nl.appyhapps.healthsync'],
+  hrv:    ['com.ouraring.oura'],
+  spo2:   ['com.ouraring.oura', 'nl.appyhapps.healthsync'],
+  steps:  ['nl.appyhapps.healthsync'],
+  hr:     ['com.ouraring.oura', 'fi.polar.polarflow'],
+  energy: [] // no source filter needed
+};
+
+// Track seen step timestamps to avoid duplicates
+const seenSteps = new Set();
+
 function processRows(rows, type) {
   rows.forEach(row => {
     const key = toDateKey(row['Date']);
     if (!key) return;
+    const source = (row['Source'] || '').trim();
+
     try {
       if (type === 'rhr') {
+        // Only use trusted sources for RHR
+        if (source && TRUSTED_SOURCES.rhr.length && !TRUSTED_SOURCES.rhr.includes(source)) return;
         const val = parseFloat(row['Resting heart rate'] || row['Heart rate']);
         if (!isNaN(val)) { if (!HEALTH.rhr[key] || val < HEALTH.rhr[key]) HEALTH.rhr[key] = val; }
+
       } else if (type === 'hrv') {
+        if (source && !TRUSTED_SOURCES.hrv.includes(source)) return;
         const val = parseFloat(row['heart rate variability']);
         if (!isNaN(val)) { if (!HEALTH.hrv[key]) HEALTH.hrv[key] = []; HEALTH.hrv[key].push(val); }
+
       } else if (type === 'spo2') {
+        if (source && TRUSTED_SOURCES.spo2.length && !TRUSTED_SOURCES.spo2.includes(source)) return;
         const val = parseFloat(row['Oxygen saturation']);
         if (!isNaN(val)) { if (!HEALTH.spo2[key]) HEALTH.spo2[key] = []; HEALTH.spo2[key].push(val); }
+
       } else if (type === 'steps') {
+        // Only Huawei via HealthSync, deduplicate by timestamp
+        if (source && !TRUSTED_SOURCES.steps.includes(source)) return;
+        const sig = row['Date'] + '|' + row['Time'] + '|' + row['Steps'];
+        if (seenSteps.has(sig)) return;
+        seenSteps.add(sig);
         const val = parseFloat(row['Steps']);
         if (!isNaN(val)) { HEALTH.steps[key] = (HEALTH.steps[key]||0) + val; }
+
       } else if (type === 'sleep') {
+        // Only Oura for sleep
+        if (source && !TRUSTED_SOURCES.sleep.includes(source)) return;
         const secs = parseFloat(row['Duration in seconds']);
         const stage = (row['Sleep stage']||'').toLowerCase();
         if (!isNaN(secs)) {
@@ -1220,6 +1251,7 @@ function processRows(rows, type) {
           HEALTH.sleep[key].total += secs/3600;
           if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[key][stage] += secs/3600;
         }
+
       } else if (type === 'energy') {
         const active = parseFloat(row['Active calories']);
         const total = parseFloat(row['Total calories']);
