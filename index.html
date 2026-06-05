@@ -1178,6 +1178,8 @@ function renderActTable(acts) {
 // GOOGLE DRIVE HEALTH FETCHER
 // ══════════════════════════════════════════
 const GDRIVE_KEY = 'AIzaSyC7bzvXKmRWvWxOhhIt3q0CzFWm3Xsheng';
+const OURA_TOKEN = '6XTBALHRTJK5V3JEF66MGHRPDPVDSPSP';
+
 const GDRIVE_FOLDERS = {
   main:    '1HWiMTG7IwEaBGaNcLWVKmaPDAaGlCaLI',
   folder2: '1nkQirwJxpuZCOPW3aeHxO3UwBa_jiDrv',
@@ -1327,50 +1329,121 @@ function getFileType(name) {
   return null;
 }
 
+// ── Oura API fetcher ─────────────────────────────────────────
+async function fetchOuraData() {
+  const today = new Date().toISOString().slice(0,10);
+  const start = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+  const headers = { 'Authorization': `Bearer ${OURA_TOKEN}` };
+
+  try {
+    // Sleep
+    setText('Fetching Oura sleep data...');
+    const sleepRes = await fetch(`https://api.ouraring.com/v2/usercollection/sleep?start_date=${start}&end_date=${today}`, {headers});
+    if (sleepRes.ok) {
+      const sleepData = await sleepRes.json();
+      (sleepData.data || []).forEach(s => {
+        if (s.type === 'deleted') return;
+        const key = s.day;
+        HEALTH.sleep[key] = {
+          total: +(((s.total_sleep_duration||0)/3600).toFixed(2)),
+          deep:  +(((s.deep_sleep_duration||0)/3600).toFixed(2)),
+          light: +(((s.light_sleep_duration||0)/3600).toFixed(2)),
+          rem:   +(((s.rem_sleep_duration||0)/3600).toFixed(2)),
+          awake: +(((s.awake_time||0)/3600).toFixed(2)),
+          efficiency: s.efficiency || null,
+        };
+      });
+    }
+
+    // Daily readiness (includes HRV, RHR)
+    setText('Fetching Oura readiness data...');
+    const readRes = await fetch(`https://api.ouraring.com/v2/usercollection/daily_readiness?start_date=${start}&end_date=${today}`, {headers});
+    if (readRes.ok) {
+      const readData = await readRes.json();
+      (readData.data || []).forEach(r => {
+        const key = r.day;
+        if (r.contributors?.resting_heart_rate) HEALTH.rhr[key] = r.contributors.resting_heart_rate;
+        if (r.contributors?.hrv_balance) HEALTH.hrv[key] = r.contributors.hrv_balance;
+      });
+    }
+
+    // Daily activity (steps, calories)
+    setText('Fetching Oura activity data...');
+    const actRes = await fetch(`https://api.ouraring.com/v2/usercollection/daily_activity?start_date=${start}&end_date=${today}`, {headers});
+    if (actRes.ok) {
+      const actData = await actRes.json();
+      (actData.data || []).forEach(a => {
+        const key = a.day;
+        if (a.steps) HEALTH.steps[key] = a.steps;
+        if (a.active_calories) HEALTH.energy[key] = {active: a.active_calories, total: a.total_calories||0};
+      });
+    }
+
+    // SPO2
+    setText('Fetching Oura SpO2 data...');
+    const spo2Res = await fetch(`https://api.ouraring.com/v2/usercollection/daily_spo2?start_date=${start}&end_date=${today}`, {headers});
+    if (spo2Res.ok) {
+      const spo2Data = await spo2Res.json();
+      (spo2Data.data || []).forEach(s => {
+        if (s.spo2_percentage?.average) HEALTH.spo2[s.day] = +s.spo2_percentage.average.toFixed(1);
+      });
+    }
+
+    // Heart rate (for RHR trend)
+    setText('Fetching Oura heart rate data...');
+    const hrRes = await fetch(`https://api.ouraring.com/v2/usercollection/heartrate?start_datetime=${start}T00:00:00&end_datetime=${today}T23:59:59`, {headers});
+    if (hrRes.ok) {
+      const hrData = await hrRes.json();
+      const dayMin = {};
+      (hrData.data || []).forEach(h => {
+        const key = h.timestamp.slice(0,10);
+        if (h.source === 'rest' || h.source === 'sleep') {
+          if (!dayMin[key] || h.bpm < dayMin[key]) dayMin[key] = h.bpm;
+        }
+      });
+      // Only fill RHR where we don't already have it from readiness
+      Object.entries(dayMin).forEach(([k,v]) => { if (!HEALTH.rhr[k]) HEALTH.rhr[k] = v; });
+    }
+
+  } catch(e) {
+    console.warn('Oura API error:', e);
+  }
+}
+
 async function fetchAllHealthData() {
-  setText('Fetching health data from Google Drive...');
+  // Fetch from Oura API (primary source - accurate)
+  await fetchOuraData();
+
+  // Also fetch steps from Google Drive as fallback for Huawei steps
+  setText('Fetching steps from Google Drive...');
   const allFolderIds = Object.values(GDRIVE_FOLDERS);
   const allFiles = [];
-  
   for (const fid of allFolderIds) {
     try {
       const files = await listFolder(fid);
-      allFiles.push(...files);
-    } catch(e) { console.warn('Folder fetch failed:', fid, e); }
+      allFiles.push(...files.filter(f => getFileType(f.name) === 'steps'));
+    } catch(e) {}
   }
-
-  // Deduplicate by name, keep latest
   const seen = {};
   allFiles.forEach(f => { if (!seen[f.name] || f.modifiedTime > seen[f.name].modifiedTime) seen[f.name] = f; });
-  const uniqueFiles = Object.values(seen);
-
-  setText(`Processing ${uniqueFiles.length} health files...`);
-  
-  // Only keep the 2 most recent files per type to avoid fetching 100+ files
-  const byType = {};
-  uniqueFiles.forEach(f => {
-    const type = getFileType(f.name);
-    if (!type) return;
-    if (!byType[type]) byType[type] = [];
-    byType[type].push(f);
-  });
-  // Sort each type by modified date desc, keep top 3
-  const filesToFetch = [];
-  Object.values(byType).forEach(files => {
-    files.sort((a,b) => b.modifiedTime.localeCompare(a.modifiedTime));
-    filesToFetch.push(...files.slice(0, 3));
-  });
-
-  setText(`Processing ${filesToFetch.length} health files...`);
-
-  for (const file of filesToFetch) {
-    const type = getFileType(file.name);
-    if (!type) continue;
+  const stepsFiles = Object.values(seen).sort((a,b) => b.modifiedTime.localeCompare(a.modifiedTime)).slice(0,3);
+  for (const file of stepsFiles) {
     try {
       const csv = await fetchCSV(file.id);
       const rows = parseCSVText(csv);
-      processRows(rows, type);
-    } catch(e) { console.warn('File fetch failed:', file.name, e); }
+      // Only add steps where Oura didn't provide them
+      rows.forEach(row => {
+        const key = toDateKey(row['Date']);
+        if (!key || HEALTH.steps[key]) return;
+        const source = (row['Source']||'').trim();
+        if (source && !TRUSTED_SOURCES.steps.includes(source)) return;
+        const sig = row['Date']+'|'+row['Time']+'|'+row['Steps'];
+        if (seenSteps.has(sig)) return;
+        seenSteps.add(sig);
+        const val = parseFloat(row['Steps']);
+        if (!isNaN(val)) HEALTH.steps[key] = (HEALTH.steps[key]||0) + val;
+      });
+    } catch(e) {}
   }
 
   finaliseHealth();
@@ -1392,13 +1465,15 @@ function renderHealth() {
   const avgHRV = (hrvVals.reduce((s,v)=>s+v,0)/hrvVals.length).toFixed(1);
   const latestHRV = Object.values(HEALTH.hrv).slice(-1)[0];
   const avgSteps = Math.round(stepsVals.reduce((s,v)=>s+v,0)/stepsVals.length);
-  const todaySleep = HEALTH.sleep['2026-06-05'];
-  const ystdSleep = HEALTH.sleep['2026-06-04'];
+  const todayKey = new Date().toISOString().slice(0,10);
+  const ystdKey = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const todaySleep = HEALTH.sleep[todayKey];
+  const ystdSleep = HEALTH.sleep[ystdKey];
 
   // Recovery score based on RHR, HRV, SPO2
   const rhrScore = minRHR <= 46 ? 100 : minRHR <= 50 ? 80 : 60;
   const hrvScore = latestHRV >= 40 ? 100 : latestHRV >= 30 ? 70 : 50;
-  const spo2Today = HEALTH.spo2['2026-06-05'] || 97;
+  const spo2Today = HEALTH.spo2[todayKey] || HEALTH.spo2[ystdKey] || 97;
   const spo2Score = spo2Today >= 97 ? 100 : spo2Today >= 95 ? 75 : 50;
   const sleepScore = ystdSleep ? (ystdSleep.total >= 7 ? 100 : ystdSleep.total >= 6 ? 70 : 40) : 60;
   const recoveryScore = Math.round((rhrScore*0.3 + hrvScore*0.3 + spo2Score*0.2 + sleepScore*0.2));
