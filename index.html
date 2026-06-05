@@ -1266,20 +1266,21 @@ function processRows(rows, type) {
         if (!isNaN(val)) { HEALTH.steps[key] = (HEALTH.steps[key]||0) + val; }
 
       } else if (type === 'sleep') {
-        // Only Oura for sleep (no source column in sleep CSV, use timestamp dedup + block cap)
+        // Only use first session — stop when timestamps go backwards (2nd source starts)
         const secs = parseFloat(row['Duration in seconds']);
         const stage = (row['Sleep stage']||'').toLowerCase();
         if (!isNaN(secs)) {
-          // Deduplicate by timestamp only (ignore duplicate sessions from other sources)
+          const dt = new Date(row['Date'].replace(/\./g, '-').replace(' ', 'T'));
+          // Detect backward timestamp jump = second session starting, stop processing
+          if (!HEALTH._lastSleepDt) HEALTH._lastSleepDt = dt;
+          if (dt < HEALTH._lastSleepDt) return; // second session — skip
+          HEALTH._lastSleepDt = dt;
+          // Deduplicate by timestamp
           const sleepTs = row['Date'] + '|' + row['Time'];
           if (!HEALTH._sleepSeen) HEALTH._sleepSeen = new Set();
           if (HEALTH._sleepSeen.has(sleepTs)) return;
           HEALTH._sleepSeen.add(sleepTs);
-          // Cap each block at 1800s (30min) — Oura records max 30min intervals
-          // This filters out inflated blocks from non-Oura sources
-          const cappedSecs = Math.min(secs, 1800);
           // Group midnight segments under previous day
-          const dt = new Date(row['Date'].replace(/\./g, '-').replace(' ', 'T'));
           const hour = dt.getHours();
           let sleepKey = key;
           if (hour < 12) {
@@ -1288,8 +1289,8 @@ function processRows(rows, type) {
             sleepKey = prev.toISOString().slice(0,10);
           }
           if (!HEALTH.sleep[sleepKey]) HEALTH.sleep[sleepKey] = {total:0,deep:0,light:0,rem:0,awake:0};
-          HEALTH.sleep[sleepKey].total += cappedSecs/3600;
-          if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[sleepKey][stage] += cappedSecs/3600;
+          HEALTH.sleep[sleepKey].total += secs/3600;
+          if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[sleepKey][stage] += secs/3600;
         }
 
       } else if (type === 'energy') {
