@@ -1272,25 +1272,23 @@ function processRows(rows, type) {
         const stage = (row['Sleep stage']||'').toLowerCase();
         if (!isNaN(secs)) {
           const dt = new Date(row['Date'].replace(/\./g, '-').replace(' ', 'T'));
-          // Stop at backward timestamp = start of duplicate session from 2nd source
-          if (!HEALTH._lastSleepDt) HEALTH._lastSleepDt = dt;
-          if (dt < HEALTH._lastSleepDt) return;
-          HEALTH._lastSleepDt = dt;
-          // Deduplicate by timestamp only
-          const sleepTs = row['Date'] + '|' + row['Time'];
+          // Stop at backward jump in timestamps = start of 2nd source session
+          if (!HEALTH._sleepLastDt) HEALTH._sleepLastDt = dt;
+          if (dt < HEALTH._sleepLastDt) return;
+          HEALTH._sleepLastDt = dt;
+          // Deduplicate by timestamp only (same moment = same row)
+          const ts = row['Date']+'|'+row['Time'];
           if (!HEALTH._sleepSeen) HEALTH._sleepSeen = new Set();
-          if (HEALTH._sleepSeen.has(sleepTs)) return;
-          HEALTH._sleepSeen.add(sleepTs);
-          // Group midnight segments under previous night's date
+          if (HEALTH._sleepSeen.has(ts)) return;
+          HEALTH._sleepSeen.add(ts);
+          // Assign to night: before 14:00 = previous night
           const hour = dt.getHours();
           let sleepKey = key;
           if (hour < 14) {
-            const prev = new Date(dt);
-            prev.setDate(prev.getDate() - 1);
+            const prev = new Date(dt); prev.setDate(prev.getDate()-1);
             sleepKey = prev.toISOString().slice(0,10);
           }
-          if (!HEALTH.sleep[sleepKey]) HEALTH.sleep[sleepKey] = {total:0,deep:0,light:0,rem:0,awake:0,_raw:[]};
-          HEALTH.sleep[sleepKey]._raw.push({stage, secs});
+          if (!HEALTH.sleep[sleepKey]) HEALTH.sleep[sleepKey] = {total:0,deep:0,light:0,rem:0,awake:0};
           HEALTH.sleep[sleepKey].total += secs/3600;
           if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[sleepKey][stage] += secs/3600;
         }
@@ -1377,7 +1375,7 @@ async function fetchAllHealthData() {
     try {
       const csv = await fetchCSV(file.id);
       const rows = parseCSVText(csv);
-      if (type === 'sleep') { HEALTH._lastSleepDt = null; HEALTH._sleepSeen = new Set(); }
+      if (type === 'sleep') { HEALTH._sleepLastDt = null; HEALTH._sleepSeen = new Set(); }
       processRows(rows, type);
     } catch(e) { console.warn('File fetch failed:', file.name, e); }
   }
