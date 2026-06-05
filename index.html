@@ -1274,7 +1274,10 @@ function processRows(rows, type) {
           const dt = new Date(row['Date'].replace(/\./g, '-').replace(' ', 'T'));
           // Stop at backward jump in timestamps = start of 2nd source session
           if (!HEALTH._sleepLastDt) HEALTH._sleepLastDt = dt;
-          if (dt < HEALTH._sleepLastDt) return;
+          if (dt < HEALTH._sleepLastDt) {
+            console.log('SLEEP: backward jump, stopping. Last:', HEALTH._sleepLastDt, 'Current:', dt);
+            return;
+          }
           HEALTH._sleepLastDt = dt;
           // Deduplicate by timestamp only (same moment = same row)
           const ts = row['Date']+'|'+row['Time'];
@@ -1337,47 +1340,24 @@ async function fetchOuraData() {
 }
 
 async function fetchAllHealthData() {
-  setText('Fetching health data from Google Drive...');
-  const allFolderIds = Object.values(GDRIVE_FOLDERS);
-  const allFiles = [];
+  setText('Fetching health data...');
+  try {
+    const res = await fetch('https://script.google.com/macros/s/AKfycbzRKq-_fRH5kKfpQe8roHJGfTcKSKpK-ufKyFrn3oi2-sOMYy4--UP9x_vayXWqmo-O2w/exec');
+    const data = await res.json();
+    
+    // Process each type
+    Object.entries(data).forEach(([type, files]) => {
+      if (!Array.isArray(files)) return;
+      files.forEach(file => {
+        if (!file.content) return;
+        const rows = parseCSVText(file.content);
+        if (type === 'sleep') { HEALTH._sleepLastDt = null; HEALTH._sleepSeen = new Set(); }
+        processRows(rows, type);
+      });
+    });
 
-  for (const fid of allFolderIds) {
-    try {
-      const files = await listFolder(fid);
-      allFiles.push(...files);
-    } catch(e) { console.warn('Folder fetch failed:', fid, e); }
-  }
-
-  // Deduplicate by name, keep latest
-  const seen = {};
-  allFiles.forEach(f => { if (!seen[f.name] || f.modifiedTime > seen[f.name].modifiedTime) seen[f.name] = f; });
-  const uniqueFiles = Object.values(seen);
-
-  // Group by type, keep 3 most recent per type
-  const byType = {};
-  uniqueFiles.forEach(f => {
-    const type = getFileType(f.name);
-    if (!type) return;
-    if (!byType[type]) byType[type] = [];
-    byType[type].push(f);
-  });
-  const filesToFetch = [];
-  Object.values(byType).forEach(files => {
-    files.sort((a,b) => b.modifiedTime.localeCompare(a.modifiedTime));
-    filesToFetch.push(...files.slice(0, 3));
-  });
-
-  setText(`Processing ${filesToFetch.length} health files...`);
-
-  for (const file of filesToFetch) {
-    const type = getFileType(file.name);
-    if (!type) continue;
-    try {
-      const csv = await fetchCSV(file.id);
-      const rows = parseCSVText(csv);
-      if (type === 'sleep') { HEALTH._sleepLastDt = null; HEALTH._sleepSeen = new Set(); }
-      processRows(rows, type);
-    } catch(e) { console.warn('File fetch failed:', file.name, e); }
+  } catch(e) {
+    console.warn('Health proxy failed:', e);
   }
 
   finaliseHealth();
