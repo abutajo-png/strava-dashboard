@@ -254,6 +254,7 @@ tr:hover td { background: var(--surface2); }
       <button class="nav-tab" onclick="switchTab('heartrate',this)">Heart rate</button>
       <button class="nav-tab" onclick="switchTab('activities',this)">All activities</button>
       <button class="nav-tab" onclick="switchTab('coaching',this)">🏔️ Coach</button>
+      <button class="nav-tab" onclick="switchTab('health',this)">❤️ Health</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -347,6 +348,7 @@ tr:hover td { background: var(--surface2); }
 
     <!-- COACHING -->
     <div id="tab-coaching" class="tab-panel"></div>
+    <div id="tab-health" class="tab-panel"></div>
 
     <!-- ALL ACTIVITIES -->
     <div id="tab-activities" class="tab-panel">
@@ -457,7 +459,11 @@ function setText(t) { $('loading-text').textContent = t; }
 (async () => {
   try {
     const token = await getToken();
-    const [athlete, acts] = await Promise.all([fetchAthlete(token), fetchAll(token)]);
+    const [athlete, acts] = await Promise.all([
+      fetchAthlete(token), 
+      fetchAll(token),
+      fetchAllHealthData()
+    ]);
     allActs = acts.sort((a,b) => new Date(b.start_date)-new Date(a.start_date));
     $('loading-screen').style.display = 'none';
     $('dashboard').style.display = 'block';
@@ -491,6 +497,7 @@ function renderAll(athlete, acts) {
   renderHR(acts);
   renderActivities(acts);
   renderCoaching(acts);
+  renderHealth();
 }
 
 // ══════════════════════════════════════════
@@ -1138,6 +1145,368 @@ function renderActTable(acts) {
     </tr>`;
   }).join('');
 }
+
+// ══════════════════════════════════════════
+// HEALTH DATA (from Google Health Connect CSVs)
+// ══════════════════════════════════════════
+
+// ══════════════════════════════════════════
+// GOOGLE DRIVE HEALTH FETCHER
+// ══════════════════════════════════════════
+const GDRIVE_KEY = 'AIzaSyC7bzvXKmRWvWxOhhIt3q0CzFWm3Xsheng';
+const GDRIVE_FOLDERS = {
+  main:    '1HWiMTG7IwEaBGaNcLWVKmaPDAaGlCaLI',
+  folder2: '1nkQirwJxpuZCOPW3aeHxO3UwBa_jiDrv',
+  folder3: '1T21LZDYyACX1wjhGlRPiwMuWhyFN4wI2',
+  folder4: '1yzpJ3-nWCWgjn64DUgdI3UYJSw6erCqo',
+  folder5: '1IVbOlSiU06JpX26uVhs5b3fh1tC5RbY2',
+  folder6: '1lw2ayqClQuM5r7OCrhUyUX2yPMBKxoyP',
+};
+
+let HEALTH = {rhr:{},hrv:{},spo2:{},steps:{},sleep:{},energy:{}};
+
+async function listFolder(folderId) {
+  const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+trashed=false&key=${GDRIVE_KEY}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime+desc`;
+  const r = await fetch(url);
+  const d = await r.json();
+  return d.files || [];
+}
+
+async function fetchCSV(fileId) {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${GDRIVE_KEY}`;
+  const r = await fetch(url);
+  return r.text();
+}
+
+function parseCSVText(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h=>h.trim().replace(/"/g,''));
+  return lines.slice(1).map(line => {
+    const vals = line.split(',').map(v=>v.trim().replace(/"/g,''));
+    const obj = {};
+    headers.forEach((h,i) => obj[h] = vals[i]);
+    return obj;
+  });
+}
+
+function toDateKey(dateStr) {
+  if (!dateStr) return null;
+  const d = dateStr.replace(/\./g, '-').slice(0,10);
+  return d;
+}
+
+function processRows(rows, type) {
+  rows.forEach(row => {
+    const key = toDateKey(row['Date']);
+    if (!key) return;
+    try {
+      if (type === 'rhr') {
+        const val = parseFloat(row['Resting heart rate'] || row['Heart rate']);
+        if (!isNaN(val)) { if (!HEALTH.rhr[key] || val < HEALTH.rhr[key]) HEALTH.rhr[key] = val; }
+      } else if (type === 'hrv') {
+        const val = parseFloat(row['heart rate variability']);
+        if (!isNaN(val)) { if (!HEALTH.hrv[key]) HEALTH.hrv[key] = []; HEALTH.hrv[key].push(val); }
+      } else if (type === 'spo2') {
+        const val = parseFloat(row['Oxygen saturation']);
+        if (!isNaN(val)) { if (!HEALTH.spo2[key]) HEALTH.spo2[key] = []; HEALTH.spo2[key].push(val); }
+      } else if (type === 'steps') {
+        const val = parseFloat(row['Steps']);
+        if (!isNaN(val)) { HEALTH.steps[key] = (HEALTH.steps[key]||0) + val; }
+      } else if (type === 'sleep') {
+        const secs = parseFloat(row['Duration in seconds']);
+        const stage = (row['Sleep stage']||'').toLowerCase();
+        if (!isNaN(secs)) {
+          if (!HEALTH.sleep[key]) HEALTH.sleep[key] = {total:0,deep:0,light:0,rem:0,awake:0};
+          HEALTH.sleep[key].total += secs/3600;
+          if (['deep','light','rem','awake'].includes(stage)) HEALTH.sleep[key][stage] += secs/3600;
+        }
+      } else if (type === 'energy') {
+        const active = parseFloat(row['Active calories']);
+        const total = parseFloat(row['Total calories']);
+        if (!isNaN(active)) HEALTH.energy[key] = {active:Math.round(active), total:Math.round(total)};
+      }
+    } catch(e) {}
+  });
+}
+
+function finaliseHealth() {
+  // Average arrays
+  Object.keys(HEALTH.hrv).forEach(k => {
+    if (Array.isArray(HEALTH.hrv[k])) HEALTH.hrv[k] = +(HEALTH.hrv[k].reduce((s,v)=>s+v,0)/HEALTH.hrv[k].length).toFixed(1);
+  });
+  Object.keys(HEALTH.spo2).forEach(k => {
+    if (Array.isArray(HEALTH.spo2[k])) HEALTH.spo2[k] = +(HEALTH.spo2[k].reduce((s,v)=>s+v,0)/HEALTH.spo2[k].length).toFixed(1);
+  });
+  Object.keys(HEALTH.sleep).forEach(k => {
+    Object.keys(HEALTH.sleep[k]).forEach(s => HEALTH.sleep[k][s] = +HEALTH.sleep[k][s].toFixed(2));
+  });
+  Object.keys(HEALTH.steps).forEach(k => HEALTH.steps[k] = Math.round(HEALTH.steps[k]));
+}
+
+function getFileType(name) {
+  const n = name.toLowerCase();
+  if (n.includes('rhr') || n.includes('resting')) return 'rhr';
+  if (n.includes('hrv') || n.includes('heart rate variability')) return 'hrv';
+  if (n.includes('oxygen') || n.includes('spo2') || n.includes('saturation')) return 'spo2';
+  if (n.includes('steps')) return 'steps';
+  if (n.includes('sleep')) return 'sleep';
+  if (n.includes('energy') || n.includes('calorie')) return 'energy';
+  return null;
+}
+
+async function fetchAllHealthData() {
+  setText('Fetching health data from Google Drive...');
+  const allFolderIds = Object.values(GDRIVE_FOLDERS);
+  const allFiles = [];
+  
+  for (const fid of allFolderIds) {
+    try {
+      const files = await listFolder(fid);
+      allFiles.push(...files);
+    } catch(e) { console.warn('Folder fetch failed:', fid, e); }
+  }
+
+  // Deduplicate by name, keep latest
+  const seen = {};
+  allFiles.forEach(f => { if (!seen[f.name] || f.modifiedTime > seen[f.name].modifiedTime) seen[f.name] = f; });
+  const uniqueFiles = Object.values(seen);
+
+  setText(`Processing ${uniqueFiles.length} health files...`);
+  
+  // Only keep the 2 most recent files per type to avoid fetching 100+ files
+  const byType = {};
+  uniqueFiles.forEach(f => {
+    const type = getFileType(f.name);
+    if (!type) return;
+    if (!byType[type]) byType[type] = [];
+    byType[type].push(f);
+  });
+  // Sort each type by modified date desc, keep top 3
+  const filesToFetch = [];
+  Object.values(byType).forEach(files => {
+    files.sort((a,b) => b.modifiedTime.localeCompare(a.modifiedTime));
+    filesToFetch.push(...files.slice(0, 3));
+  });
+
+  setText(`Processing ${filesToFetch.length} health files...`);
+
+  for (const file of filesToFetch) {
+    const type = getFileType(file.name);
+    if (!type) continue;
+    try {
+      const csv = await fetchCSV(file.id);
+      const rows = parseCSVText(csv);
+      processRows(rows, type);
+    } catch(e) { console.warn('File fetch failed:', file.name, e); }
+  }
+
+  finaliseHealth();
+  setText('Building dashboard...');
+}
+
+
+function renderHealth() {
+  const rhrVals = Object.values(HEALTH.rhr);
+  const spo2Vals = Object.values(HEALTH.spo2);
+  const hrvVals = Object.values(HEALTH.hrv);
+  const stepsVals = Object.values(HEALTH.steps);
+  const days = Object.keys(HEALTH.rhr).sort();
+
+  const avgRHR = Math.round(rhrVals.reduce((s,v)=>s+v,0)/rhrVals.length);
+  const minRHR = Math.min(...rhrVals);
+  const avgSpo2 = (spo2Vals.reduce((s,v)=>s+v,0)/spo2Vals.length).toFixed(1);
+  const minSpo2 = Math.min(...spo2Vals);
+  const avgHRV = (hrvVals.reduce((s,v)=>s+v,0)/hrvVals.length).toFixed(1);
+  const latestHRV = Object.values(HEALTH.hrv).slice(-1)[0];
+  const avgSteps = Math.round(stepsVals.reduce((s,v)=>s+v,0)/stepsVals.length);
+  const todaySleep = HEALTH.sleep['2026-06-05'];
+  const ystdSleep = HEALTH.sleep['2026-06-04'];
+
+  // Recovery score based on RHR, HRV, SPO2
+  const rhrScore = minRHR <= 46 ? 100 : minRHR <= 50 ? 80 : 60;
+  const hrvScore = latestHRV >= 40 ? 100 : latestHRV >= 30 ? 70 : 50;
+  const spo2Today = HEALTH.spo2['2026-06-05'] || 97;
+  const spo2Score = spo2Today >= 97 ? 100 : spo2Today >= 95 ? 75 : 50;
+  const sleepScore = ystdSleep ? (ystdSleep.total >= 7 ? 100 : ystdSleep.total >= 6 ? 70 : 40) : 60;
+  const recoveryScore = Math.round((rhrScore*0.3 + hrvScore*0.3 + spo2Score*0.2 + sleepScore*0.2));
+  const recColor = recoveryScore >= 80 ? 'var(--green)' : recoveryScore >= 60 ? 'var(--amber)' : 'var(--red)';
+  const recLabel = recoveryScore >= 80 ? 'Well recovered' : recoveryScore >= 60 ? 'Moderate recovery' : 'Under-recovered';
+
+  // Today's readiness advice
+  let readinessAdvice = '';
+  if (recoveryScore >= 80) readinessAdvice = "Green light for tomorrow's trail run. Body is well recovered. Push at moderate-hard effort.";
+  else if (recoveryScore >= 60) readinessAdvice = "Moderate recovery. Tomorrow's 10km trail run is fine — keep effort controlled. Watch HR, stay under Z3.";
+  else readinessAdvice = "Body signals fatigue. Tomorrow run easy — treat it as a reconnaissance, not a workout. Prioritise sleep tonight.";
+
+  // SPO2 alert
+  const spo2Alert = spo2Today < 95 ? `⚠️ SPO2 today is ${spo2Today}% — below optimal. Ensure good sleep tonight and don't push hard intensity tomorrow.` : '';
+
+  // Strava workout dates for correlation
+  const workoutDates = new Set(allActs.map(a => a.start_date_local.slice(0,10)));
+
+  const labels = days;
+
+  $('tab-health').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.5rem;">
+      ${[
+        {label:'Avg RHR',val:avgRHR,unit:'bpm',sub:`Best: ${minRHR} bpm`,c:'var(--red)'},
+        {label:'Avg SPO2',val:avgSpo2,unit:'%',sub:`Min: ${minSpo2}%${minSpo2<95?' ⚠️':''}`,c:avgSpo2>=97?'var(--green)':'var(--amber)'},
+        {label:'Avg HRV',val:avgHRV,unit:'ms',sub:`Latest: ${latestHRV} ms`,c:'var(--blue)'},
+        {label:'Avg daily steps',val:avgSteps.toLocaleString(),unit:'',sub:'last 25 days',c:'var(--purple)'},
+        {label:'Sleep last night',val:ystdSleep?ystdSleep.total.toFixed(1):'—',unit:'hrs',sub:ystdSleep?`Deep: ${ystdSleep.deep}h · Light: ${ystdSleep.light}h`:'No data',c:ystdSleep&&ystdSleep.total>=7?'var(--green)':'var(--accent)'},
+        {label:'Recovery score',val:recoveryScore,unit:'/100',sub:recLabel,c:recColor},
+      ].map(m=>`<div class="metric-card" style="--c:${m.c}">
+        <div class="metric-label">${m.label}</div>
+        <div class="metric-value">${m.val}<span class="metric-unit">${m.unit}</span></div>
+        <div class="metric-sub">${m.sub}</div>
+      </div>`).join('')}
+    </div>
+
+    ${spo2Alert ? `<div style="background:var(--accent-dim);border:1px solid var(--accent);border-radius:10px;padding:12px 16px;margin-bottom:1rem;font-size:13px;color:var(--accent);">${spo2Alert}</div>` : ''}
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${recColor};border-radius:12px;padding:1.25rem;margin-bottom:1.5rem;">
+      <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Today's readiness for tomorrow's run</div>
+      <div style="font-family:'Outfit',sans-serif;font-size:18px;font-weight:700;color:${recColor};margin-bottom:4px;">${recLabel} (${recoveryScore}/100)</div>
+      <div style="font-size:13px;color:var(--muted2);">${readinessAdvice}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">Resting heart rate trend</div>
+        <div style="position:relative;height:180px;"><canvas id="rhrChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">SPO2 trend (%)</div>
+        <div style="position:relative;height:180px;"><canvas id="spo2Chart"></canvas></div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">HRV (last 4 nights)</div>
+        <div style="position:relative;height:180px;"><canvas id="hrvChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Daily steps</div>
+        <div style="position:relative;height:180px;"><canvas id="stepsChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Sleep breakdown (Jun 4–5)</div>
+      <div style="position:relative;height:180px;"><canvas id="sleepChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">RHR vs training days correlation</div>
+      <div style="position:relative;height:200px;"><canvas id="rhrWorkoutChart"></canvas></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;">Orange bars = days you trained. Watch for RHR spikes after hard blocks.</div>
+    </div>
+  `;
+
+  // RHR chart
+  destroyChart('rhr');
+  charts.rhr = new Chart($('rhrChart'), {
+    type: 'line',
+    data: {
+      labels: days.map(d => d.slice(5)),
+      datasets: [{
+        data: days.map(d => HEALTH.rhr[d]||null),
+        borderColor: '#cc2200', backgroundColor: 'rgba(204,34,0,0.08)',
+        fill: true, tension: 0.3, pointRadius: 2, borderWidth: 1.5
+      }]
+    },
+    options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{...baseScales('','bpm'),y:{...baseScales().y,min:40,max:65}}}
+  });
+
+  // SPO2 chart
+  destroyChart('spo2');
+  charts.spo2 = new Chart($('spo2Chart'), {
+    type: 'line',
+    data: {
+      labels: Object.keys(HEALTH.spo2).map(d=>d.slice(5)),
+      datasets: [{
+        data: Object.values(HEALTH.spo2),
+        borderColor: '#1a5fb4', backgroundColor: 'rgba(26,95,180,0.08)',
+        fill: true, tension: 0.3, pointRadius: 2, borderWidth: 1.5,
+        pointBackgroundColor: Object.values(HEALTH.spo2).map(v => v < 95 ? '#cc2200' : '#1a5fb4')
+      }]
+    },
+    options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{...baseScales('','%'),y:{...baseScales().y,min:93,max:100},
+        x:{ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont,maxRotation:45,autoSkip:true,maxTicksLimit:8},grid:{color:CHART_DEFAULTS.gridColor}}}}
+  });
+
+  // HRV chart
+  destroyChart('hrv');
+  const hrvDays = Object.keys(HEALTH.hrv);
+  charts.hrv = new Chart($('hrvChart'), {
+    type: 'bar',
+    data: {
+      labels: hrvDays.map(d=>d.slice(5)),
+      datasets: [{
+        data: hrvDays.map(d=>HEALTH.hrv[d]),
+        backgroundColor: hrvDays.map(d => HEALTH.hrv[d] >= 37 ? 'rgba(26,122,74,0.7)' : HEALTH.hrv[d] >= 30 ? 'rgba(196,121,0,0.7)' : 'rgba(204,34,0,0.7)'),
+        borderRadius: 4, borderSkipped: false
+      }]
+    },
+    options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{...baseScales('','ms'),y:{...baseScales().y,min:0}}}
+  });
+
+  // Steps chart
+  destroyChart('steps');
+  const stepsDays = Object.keys(HEALTH.steps).sort();
+  charts.steps = new Chart($('stepsChart'), {
+    type: 'bar',
+    data: {
+      labels: stepsDays.map(d=>d.slice(5)),
+      datasets: [{
+        data: stepsDays.map(d=>HEALTH.steps[d]),
+        backgroundColor: stepsDays.map(d => HEALTH.steps[d] >= 10000 ? 'rgba(26,122,74,0.7)' : 'rgba(196,121,0,0.5)'),
+        borderRadius: 3, borderSkipped: false
+      }]
+    },
+    options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{...baseScales(),x:{ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont,maxRotation:45,autoSkip:true,maxTicksLimit:8},grid:{color:CHART_DEFAULTS.gridColor}}}}
+  });
+
+  // Sleep chart
+  destroyChart('sleep');
+  const sleepDays = Object.keys(HEALTH.sleep).sort();
+  charts.sleep = new Chart($('sleepChart'), {
+    type: 'bar',
+    data: {
+      labels: sleepDays,
+      datasets: [
+        {label:'Deep',data:sleepDays.map(d=>HEALTH.sleep[d].deep),backgroundColor:'rgba(26,95,180,0.85)',borderRadius:3},
+        {label:'REM',data:sleepDays.map(d=>HEALTH.sleep[d].rem),backgroundColor:'rgba(107,63,160,0.85)',borderRadius:3},
+        {label:'Light',data:sleepDays.map(d=>HEALTH.sleep[d].light),backgroundColor:'rgba(26,122,74,0.6)',borderRadius:3},
+        {label:'Awake',data:sleepDays.map(d=>HEALTH.sleep[d].awake),backgroundColor:'rgba(204,34,0,0.4)',borderRadius:3},
+      ]
+    },
+    options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#888070',font:{size:11}}}},
+      scales:{...baseScales('','hours'),x:{stacked:true,ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont},grid:{color:CHART_DEFAULTS.gridColor}},y:{stacked:true,ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont},grid:{color:CHART_DEFAULTS.gridColor}}}}
+  });
+
+  // RHR vs workout correlation
+  destroyChart('rhrWorkout');
+  charts.rhrWorkout = new Chart($('rhrWorkoutChart'), {
+    type: 'bar',
+    data: {
+      labels: days.map(d=>d.slice(5)),
+      datasets: [
+        {label:'RHR',data:days.map(d=>HEALTH.rhr[d]||null),type:'line',borderColor:'#cc2200',backgroundColor:'rgba(204,34,0,0.06)',fill:true,tension:0.3,pointRadius:3,borderWidth:1.5,yAxisID:'y'},
+        {label:'Trained',data:days.map(d=>workoutDates.has(d)?55:null),backgroundColor:'rgba(252,76,2,0.25)',borderRadius:2,yAxisID:'y',barThickness:8}
+      ]
+    },
+    options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{...baseScales().y,min:40,max:65},
+        x:{ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont,maxRotation:45,autoSkip:true,maxTicksLimit:10},grid:{color:CHART_DEFAULTS.gridColor}}}}
+  });
+}
+
 </script>
 </body>
 </html>
