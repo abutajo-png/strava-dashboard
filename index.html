@@ -228,6 +228,7 @@ tr:hover td { background: var(--surface2); }
 .day-cell { border-radius: 8px; padding: 8px 4px; text-align: center; background: var(--surface2); border: 1px solid var(--border); }
 .day-cell.today { border-color: var(--accent); background: rgba(252,76,2,0.08); }
 .day-cell.race-day { border-color: var(--amber); background: rgba(245,158,11,0.1); }
+.day-cell.done { border-color: var(--green); background: rgba(26,122,74,0.08); }
 .day-name { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
 .day-type { font-size: 10px; font-weight: 600; }
 .day-detail { font-size: 9px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
@@ -406,6 +407,7 @@ const fmtDist = m => m > 0 ? (m/1000).toFixed(1)+' km' : '—';
 const fmtTime = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0?`${h}h ${m}m`:`${m}m`; };
 const fmtDate = d => new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'});
 const fmtPace = mps => { if(!mps||mps===0) return '—'; const spm=1/mps*1000/60; const m=Math.floor(spm),s=Math.round((spm-m)*60); return `${m}:${s.toString().padStart(2,'0')}`; };
+const fmtSec = s => { const m=Math.floor(s/60),sec=Math.round(s%60); return `${m}:${sec.toString().padStart(2,'0')}`; };
 const isRun = a => ['Run','TrailRun','VirtualRun'].includes(a.sport_type||a.type);
 const isRide = a => ['Ride','VirtualRide','MountainBikeRide'].includes(a.sport_type||a.type);
 
@@ -484,10 +486,10 @@ function setText(t) { $('loading-text').textContent = t; }
   try {
     const token = await getToken();
     const [athlete, acts] = await Promise.all([
-      fetchAthlete(token), 
-      fetchAll(token),
-      fetchAllHealthData()
+      fetchAthlete(token),
+      fetchAll(token)
     ]);
+    await fetchAllHealthData();
     allActs = acts.sort((a,b) => new Date(b.start_date)-new Date(a.start_date));
     $('loading-screen').style.display = 'none';
     $('dashboard').style.display = 'block';
@@ -509,7 +511,6 @@ function switchTab(name, btn) {
 
 // ── main render ────────────────────────────────────────────────
 function renderAll(athlete, acts) {
-  // topbar
   $('av').src = athlete.profile || '';
   $('aname').textContent = `${athlete.firstname} ${athlete.lastname}`;
   $('ameta').textContent = `@${athlete.username} · ${acts.length} activities`;
@@ -552,7 +553,6 @@ function renderOverview(acts) {
     <div class="metric-sub">${m.sub}</div>
   </div>`).join('');
 
-  // Insights
   const hrActs = acts.filter(a=>a.average_heartrate);
   const meanHR = hrActs.length ? Math.round(hrActs.reduce((s,a)=>s+a.average_heartrate,0)/hrActs.length) : 0;
   const bestRun = runs.filter(a=>a.distance>0&&a.average_speed>0).sort((a,b)=>b.average_speed-a.average_speed)[0];
@@ -578,7 +578,6 @@ function renderOverview(acts) {
     <div class="insight-body">${i.body}</div>
   </div>`).join('');
 
-  // Monthly distance
   const mMap={};
   acts.forEach(a=>{ if(!a.distance) return; const k=a.start_date_local.slice(0,7); mMap[k]=(mMap[k]||0)+a.distance/1000; });
   const months=Object.keys(mMap).sort().slice(-12);
@@ -590,7 +589,6 @@ function renderOverview(acts) {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales()}
   });
 
-  // Type donut
   const tMap={};
   acts.forEach(a=>{ const t=a.sport_type||a.type||'Other'; tMap[t]=(tMap[t]||0)+1; });
   const tEntries=Object.entries(tMap).sort((a,b)=>b[1]-a[1]);
@@ -603,7 +601,6 @@ function renderOverview(acts) {
   });
   $('type-legend').innerHTML=tEntries.map((e,i)=>`<span><span class="ldot" style="background:${tColors[i]}"></span>${e[0]} (${e[1]})</span>`).join('');
 
-  // Weekly volume
   const wMap={};
   acts.forEach(a=>{ const k=weekKey(a.start_date_local); if(!wMap[k]) wMap[k]={dist:0,time:0,count:0}; wMap[k].dist+=a.distance||0; wMap[k].time+=a.moving_time||0; wMap[k].count++; });
   const weeks=Object.keys(wMap).sort().slice(-16);
@@ -641,11 +638,9 @@ function renderLoad(acts) {
   const sufferActs = acts.filter(a=>a.suffer_score&&a.start_date_local);
   const sorted = [...sufferActs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
 
-  // Build daily suffer map
   const dayMap={};
   sorted.forEach(a=>{ const k=a.start_date_local.slice(0,10); dayMap[k]=(dayMap[k]||0)+(a.suffer_score||0); });
 
-  // ACWR: rolling 7d acute / 28d chronic
   const dayKeys=Object.keys(dayMap).sort();
   const acuteArr=[], chronicArr=[], labels=[];
   const last20 = dayKeys.slice(-20);
@@ -678,7 +673,6 @@ function renderLoad(acts) {
     <div class="metric-sub">${m.sub}</div>
   </div>`).join('');
 
-  // ACWR chart
   destroyChart('acwr');
   charts.acwr = new Chart($('acwrChart'),{
     type:'line',
@@ -689,7 +683,6 @@ function renderLoad(acts) {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales('','Suffer score/day')}
   });
 
-  // Suffer over time
   const recentSuffer = [...sufferActs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date)).slice(-40);
   destroyChart('sufferTime');
   charts.sufferTime = new Chart($('sufferTimeChart'),{
@@ -703,10 +696,9 @@ function renderLoad(acts) {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales()}
   });
 
-  // Heatmap
   const hm=$('heatmap');
-  const weekKeys=Object.keys(dayMap).reduce((s,d)=>{ const k=weekKey(d); if(!s[k]) s[k]=0; s[k]+=dayMap[d]; return s; },{});
-  const wkArr=Object.entries(weekKeys).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12);
+  const weekKeys2=Object.keys(dayMap).reduce((s,d)=>{ const k=weekKey(d); if(!s[k]) s[k]=0; s[k]+=dayMap[d]; return s; },{});
+  const wkArr=Object.entries(weekKeys2).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12);
   const maxW=Math.max(...wkArr.map(w=>w[1]),1);
   hm.innerHTML=wkArr.map(([k,v])=>{
     const opacity=Math.max(0.1,v/maxW);
@@ -750,7 +742,6 @@ function renderPace(acts) {
     <div class="metric-sub">${m.sub}</div>
   </div>`).join('');
 
-  // Pace trend line
   const sortedRuns = [...runs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
   destroyChart('paceTrend');
   charts.paceTrend = new Chart($('paceTrendChart'),{
@@ -766,7 +757,6 @@ function renderPace(acts) {
       scales:{...baseScales('','min/km'),y:{...baseScales().y,reverse:true}}}
   });
 
-  // Distance distribution
   const bins = [0,5,10,15,21,42,Infinity];
   const binLabels = ['0–5km','5–10km','10–15km','15–21km','21–42km','42km+'];
   const binCounts = new Array(6).fill(0);
@@ -778,7 +768,6 @@ function renderPace(acts) {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales()}
   });
 
-  // Fastest runs
   const fastest = [...runs].sort((a,b)=>a.average_speed-b.average_speed>0?1:-1).reverse().slice(0,8);
   const maxSpeed = fastest[0]?.average_speed||1;
   $('fastest-runs').innerHTML = fastest.map(a=>{
@@ -790,7 +779,6 @@ function renderPace(acts) {
     </div>`;
   }).join('');
 
-  // Pace vs distance scatter
   destroyChart('paceScatter');
   charts.paceScatter = new Chart($('paceScatterChart'),{
     type:'scatter',
@@ -828,7 +816,6 @@ function renderHR(acts) {
     <div class="metric-sub">${m.sub}</div>
   </div>`).join('');
 
-  // HR Zones (estimate based on % of max HR)
   const zoneThresholds = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
   const zoneNames = ['Z1 Recovery','Z2 Aerobic','Z3 Tempo','Z4 Threshold','Z5 VO2 Max'];
   const zoneColors = ['#3dd68c','#5b9cf6','#f59e0b','#fc4c02','#f87171'];
@@ -847,7 +834,6 @@ function renderHR(acts) {
     <div style="font-size:10px;color:var(--muted);margin-bottom:10px;padding-left:80px;">${Math.round(maxHR*zoneThresholds[i])}–${Math.round(maxHR*zoneThresholds[i+1])} bpm</div>
   `).join('');
 
-  // HR trend
   const sorted = [...hrActs].sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
   destroyChart('hrTrend');
   charts.hrTrend = new Chart($('hrTrendChart'),{
@@ -862,7 +848,6 @@ function renderHR(acts) {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales('','bpm')}
   });
 
-  // Max HR by type
   const typeHR={};
   hrActs.forEach(a=>{ const t=a.sport_type||a.type||'Other'; if(!typeHR[t]) typeHR[t]=[]; typeHR[t].push(a.max_heartrate||a.average_heartrate); });
   const typeEntries=Object.entries(typeHR).map(([t,v])=>([t,Math.round(v.reduce((s,x)=>s+x,0)/v.length)])).sort((a,b)=>b[1]-a[1]);
@@ -876,7 +861,6 @@ function renderHR(acts) {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{...baseScales('','bpm'),y:{...baseScales().y,min:80}}}
   });
 
-  // HR vs suffer scatter
   const bothActs = hrActs.filter(a=>a.suffer_score);
   destroyChart('hrSuffer');
   charts.hrSuffer = new Chart($('hrSufferChart'),{
@@ -906,6 +890,27 @@ function filterActs(type, btn) {
   renderActTable(filtered);
 }
 
+function renderActTable(acts) {
+  const tbody=$('act-tbody');
+  if(!acts.length) { tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem;">No activities.</td></tr>`; return; }
+  tbody.innerHTML = acts.map(a=>{
+    const type=a.sport_type||a.type||'Other';
+    const pace = isRun(a)&&a.average_speed>0 ? fmtPace(a.average_speed) : isRide(a)&&a.average_speed>0 ? `${(a.average_speed*3.6).toFixed(1)} km/h` : '—';
+    return `<tr>
+      <td style="color:var(--muted);white-space:nowrap;">${fmtDate(a.start_date_local)}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.name}</td>
+      <td><span class="badge ${badgeClass(type)}">${type}</span></td>
+      <td>${fmtDist(a.distance)}</td>
+      <td style="color:var(--muted);">${fmtTime(a.moving_time)}</td>
+      <td style="color:var(--muted2);">${pace}</td>
+      <td>${a.average_heartrate?Math.round(a.average_heartrate)+' bpm':'—'}</td>
+      <td>${a.max_heartrate?Math.round(a.max_heartrate)+' bpm':'—'}</td>
+      <td>${a.total_elevation_gain?Math.round(a.total_elevation_gain)+'m':'—'}</td>
+      <td>${a.suffer_score?`<span class="suffer-pill ${sufferClass(a.suffer_score)}">${Math.round(a.suffer_score)}</span>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
 // ══════════════════════════════════════════
 // COACHING
 // ══════════════════════════════════════════
@@ -915,14 +920,12 @@ function renderCoaching(acts) {
   const daysToRace = Math.ceil((RACE_DATE - TODAY) / 86400000);
   const weeksToRace = (daysToRace / 7).toFixed(1);
 
-  // Phase logic
   let phase, phaseColor, phaseBg;
   if (daysToRace > 21) { phase = 'Build phase'; phaseColor = '#3dd68c'; phaseBg = 'rgba(61,214,140,0.12)'; }
   else if (daysToRace > 10) { phase = 'Peak phase'; phaseColor = '#f59e0b'; phaseBg = 'rgba(245,158,11,0.12)'; }
   else if (daysToRace > 3) { phase = '⚡ Taper phase'; phaseColor = '#fc4c02'; phaseBg = 'rgba(252,76,2,0.12)'; }
   else { phase = '🏁 Race week!'; phaseColor = '#f87171'; phaseBg = 'rgba(248,113,113,0.12)'; }
 
-  // Data analysis
   const runs = acts.filter(a => isRun(a) && a.distance > 0);
   const last7Acts = acts.filter(a => new Date(a.start_date) > new Date(Date.now() - 7*86400000));
   const last14Acts = acts.filter(a => new Date(a.start_date) > new Date(Date.now() - 14*86400000));
@@ -932,7 +935,6 @@ function renderCoaching(acts) {
   const acwr = last28Suffer > 0 ? (last7Suffer / (last28Suffer/4)) : 0;
 
   const last7RunDist = last7Acts.filter(isRun).reduce((s,a)=>s+(a.distance||0),0)/1000;
-  const last14RunDist = last14Acts.filter(isRun).reduce((s,a)=>s+(a.distance||0),0)/1000;
   const longestRun = Math.max(...runs.map(a=>a.distance/1000), 0);
   const recentRuns = runs.slice(0,5);
   const avgPaceSec = recentRuns.length ? recentRuns.reduce((s,a)=>s+(1/a.average_speed*1000),0)/recentRuns.length : 0;
@@ -943,12 +945,24 @@ function renderCoaching(acts) {
   const z2Max = Math.round(maxHRever * 0.7);
   const z2Min = Math.round(maxHRever * 0.6);
 
-  const restDays7 = 7 - last7Acts.length;
   const trailRuns = acts.filter(a => (a.sport_type||a.type||'').toLowerCase().includes('trail'));
-  const totalActs = acts.length;
 
-  // Format pace helper
-  const fmtSec = s => { const m=Math.floor(s/60),sec=Math.round(s%60); return `${m}:${sec.toString().padStart(2,'0')}`; };
+  // ── CHECK IF PLANNED TRAIL RUN IS ALREADY DONE ──────────────
+  const tomorrowDate = new Date(TODAY); tomorrowDate.setDate(TODAY.getDate()+1);
+  const todayStr = TODAY.toISOString().slice(0,10);
+  const yesterdayStr = new Date(TODAY.getTime() - 86400000).toISOString().slice(0,10);
+  const tomorrowStr = tomorrowDate.toISOString().slice(0,10);
+
+  // Look back up to 2 days for a matching trail/eco run of 8km+
+  const completedTrailRun = acts.find(a => {
+    const actDate = a.start_date_local.slice(0,10);
+    const isRecent = [todayStr, yesterdayStr, tomorrowStr].includes(actDate);
+    const isRunType = isRun(a);
+    const name = (a.name || '').toLowerCase();
+    const nameMatch = name.includes('eco') || name.includes('trail') || name.includes('echo');
+    const distMatch = a.distance >= 8000;
+    return isRecent && isRunType && (nameMatch || distMatch);
+  });
 
   // ── Race countdown banner ────────────────────────────
   const bannerHTML = `
@@ -965,24 +979,25 @@ function renderCoaching(acts) {
 
   // ── Week plan ────────────────────────────────────────
   const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const todayDow = TODAY.getDay(); // 0=Sun
+  const todayDow = TODAY.getDay();
   const mondayOffset = todayDow === 0 ? -6 : 1 - todayDow;
   const weekDays = Array.from({length:7}, (_,i) => {
     const d = new Date(TODAY); d.setDate(TODAY.getDate() + mondayOffset + i);
     return d;
   });
 
-  // Tomorrow = training run day
-  const tomorrowDate = new Date(TODAY); tomorrowDate.setDate(TODAY.getDate()+1);
-
   const dayPlans = weekDays.map(d => {
     const isToday = d.toDateString() === TODAY.toDateString();
     const isTomorrow = d.toDateString() === tomorrowDate.toDateString();
     const isRaceDay = d.toDateString() === RACE_DATE.toDateString();
+    const isDone = completedTrailRun && (
+      d.toDateString() === new Date(completedTrailRun.start_date_local).toDateString()
+    );
     const dow = d.getDay();
     let type = '', detail = '', color = 'var(--muted)';
 
     if (isRaceDay) { type = '🏁 RACE'; detail = 'Echo Trails'; color = 'var(--amber)'; }
+    else if (isDone) { type = '✅ Done'; detail = `${(completedTrailRun.distance/1000).toFixed(1)}km trail`; color = 'var(--green)'; }
     else if (isTomorrow) { type = '🏃 Run'; detail = '10km trail\neasy pace'; color = 'var(--green)'; }
     else if (isToday) { type = '😴 Rest'; detail = 'Pre-run\nrecovery'; color = 'var(--blue)'; }
     else if (dow === 6) { type = '🏋️ Strength'; detail = 'Upper body\nor cross-train'; color = 'var(--purple)'; }
@@ -991,7 +1006,7 @@ function renderCoaching(acts) {
     else if (dow === 5) { type = '🏃 Long'; detail = daysToRace > 14 ? '15–18km\nz2 pace' : '10km\nrace pace'; color = 'var(--accent)'; }
     else { type = '🏋️ Gym'; detail = 'Weight\ntraining'; color = 'var(--purple)'; }
 
-    const cls = isToday ? 'today' : isRaceDay ? 'race-day' : '';
+    const cls = isToday ? 'today' : isRaceDay ? 'race-day' : isDone ? 'done' : '';
     return `<div class="day-cell ${cls}">
       <div class="day-name">${dayNames[(d.getDay()+6)%7]}</div>
       <div class="day-name" style="color:var(--muted);font-size:8px;">${d.getDate()}/${d.getMonth()+1}</div>
@@ -1013,14 +1028,27 @@ function renderCoaching(acts) {
   // ── Advice cards ─────────────────────────────────────
   const adviceCards = [];
 
-  // Tomorrow's run
-  adviceCards.push({
-    icon: '🏃', title: "Tomorrow's training run", priority: 'high', ac: 'var(--green)',
-    body: `You're heading to the Echo Trails location for a <strong>10km training run</strong> — perfect timing. 
-    Run at an <strong>easy to moderate effort (Z2–Z3)</strong>, targeting ${fmtSec(avgPaceSec > 0 ? avgPaceSec * 1.08 : 360)}–${fmtSec(avgPaceSec > 0 ? avgPaceSec * 1.15 : 390)} /km. 
-    Focus on <strong>terrain familiarisation</strong>, not pace. Note the elevation profile and any technical sections. 
-    Keep HR under <strong>${Math.round(maxHRever * 0.78)} bpm</strong>. Carry water and fuel.`
-  });
+  // ── TRAIL RUN CARD: done vs pending ─────────────────
+  if (completedTrailRun) {
+    const dist = (completedTrailRun.distance / 1000).toFixed(1);
+    const pace = completedTrailRun.average_speed > 0 ? fmtSec(1 / completedTrailRun.average_speed * 1000) : '—';
+    const hr = completedTrailRun.average_heartrate ? ` · <strong>${Math.round(completedTrailRun.average_heartrate)} bpm avg HR</strong>` : '';
+    const elev = completedTrailRun.total_elevation_gain ? ` · <strong>${Math.round(completedTrailRun.total_elevation_gain)}m elevation</strong>` : '';
+    adviceCards.push({
+      icon: '✅', title: 'Trail run — completed!', priority: 'low', ac: 'var(--green)',
+      body: `Great work! <strong>${completedTrailRun.name}</strong> is in the bag — <strong>${dist}km</strong> at <strong>${pace}/km</strong>${hr}${elev}. 
+      Echo Trails terrain is now in your legs. Today focus on <strong>recovery</strong>: hydrate well, eat enough, and aim for 8hrs sleep tonight. 
+      Next key session: ${daysToRace > 14 ? '<strong>Wednesday tempo or Thursday easy run</strong>' : '<strong>one short shakeout 3 days before race</strong>'}.`
+    });
+  } else {
+    adviceCards.push({
+      icon: '🏃', title: "Tomorrow's training run", priority: 'high', ac: 'var(--green)',
+      body: `You're heading to the Echo Trails location for a <strong>10km training run</strong> — perfect timing. 
+      Run at an <strong>easy to moderate effort (Z2–Z3)</strong>, targeting ${fmtSec(avgPaceSec > 0 ? avgPaceSec * 1.08 : 360)}–${fmtSec(avgPaceSec > 0 ? avgPaceSec * 1.15 : 390)} /km. 
+      Focus on <strong>terrain familiarisation</strong>, not pace. Note the elevation profile and any technical sections. 
+      Keep HR under <strong>${Math.round(maxHRever * 0.78)} bpm</strong>. Carry water and fuel.`
+    });
+  }
 
   // Load warning or green light
   if (acwr > 1.4) {
@@ -1087,7 +1115,7 @@ function renderCoaching(acts) {
   adviceCards.push({
     icon: '🏔️', title: 'Trail-specific prep', priority: trailRuns.length < 3 ? 'high' : 'med', ac: 'var(--purple)',
     body: `You have <strong>${trailRuns.length} trail runs</strong> logged. 
-    ${trailRuns.length < 3 ? 'Tomorrow\'s run at the Echo Trails location is crucial — get comfortable on the terrain.' : 'Good trail experience. Tomorrow focus on technical sections and downhill running form.'} 
+    ${trailRuns.length < 3 ? 'Getting comfortable on the terrain before race day is key.' : 'Good trail experience. Focus on technical sections and downhill running form.'} 
     On race day: <strong>hike steep uphills</strong> (even elites do), run all downhills, and <strong>eat before you're hungry, drink before you're thirsty</strong>.`
   });
 
@@ -1149,33 +1177,8 @@ function renderCoaching(acts) {
   `;
 }
 
-function renderActTable(acts) {
-  const tbody=$('act-tbody');
-  if(!acts.length) { tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem;">No activities.</td></tr>`; return; }
-  tbody.innerHTML = acts.map(a=>{
-    const type=a.sport_type||a.type||'Other';
-    const pace = isRun(a)&&a.average_speed>0 ? fmtPace(a.average_speed) : isRide(a)&&a.average_speed>0 ? `${(a.average_speed*3.6).toFixed(1)} km/h` : '—';
-    return `<tr>
-      <td style="color:var(--muted);white-space:nowrap;">${fmtDate(a.start_date_local)}</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.name}</td>
-      <td><span class="badge ${badgeClass(type)}">${type}</span></td>
-      <td>${fmtDist(a.distance)}</td>
-      <td style="color:var(--muted);">${fmtTime(a.moving_time)}</td>
-      <td style="color:var(--muted2);">${pace}</td>
-      <td>${a.average_heartrate?Math.round(a.average_heartrate)+' bpm':'—'}</td>
-      <td>${a.max_heartrate?Math.round(a.max_heartrate)+' bpm':'—'}</td>
-      <td>${a.total_elevation_gain?Math.round(a.total_elevation_gain)+'m':'—'}</td>
-      <td>${a.suffer_score?`<span class="suffer-pill ${sufferClass(a.suffer_score)}">${Math.round(a.suffer_score)}</span>`:'—'}</td>
-    </tr>`;
-  }).join('');
-}
-
 // ══════════════════════════════════════════
-// HEALTH DATA (from Google Health Connect CSVs)
-// ══════════════════════════════════════════
-
-// ══════════════════════════════════════════
-// GOOGLE DRIVE HEALTH FETCHER
+// HEALTH DATA
 // ══════════════════════════════════════════
 const GDRIVE_KEY = 'AIzaSyC7bzvXKmRWvWxOhhIt3q0CzFWm3Xsheng';
 const OURA_TOKEN = '6XTBALHRTJK5V3JEF66MGHRPDPVDSPSP';
@@ -1221,7 +1224,6 @@ function toDateKey(dateStr) {
   return d;
 }
 
-// Trusted sources per metric
 const TRUSTED_SOURCES = {
   sleep:  ['com.ouraring.oura'],
   rhr:    ['com.ouraring.oura', 'nl.appyhapps.healthsync'],
@@ -1229,10 +1231,9 @@ const TRUSTED_SOURCES = {
   spo2:   ['com.ouraring.oura', 'nl.appyhapps.healthsync'],
   steps:  ['nl.appyhapps.healthsync'],
   hr:     ['com.ouraring.oura', 'fi.polar.polarflow'],
-  energy: [] // no source filter needed
+  energy: []
 };
 
-// Track seen step timestamps to avoid duplicates
 const seenSteps = new Set();
 
 function processRows(rows, type) {
@@ -1243,7 +1244,6 @@ function processRows(rows, type) {
 
     try {
       if (type === 'rhr') {
-        // Only use trusted sources for RHR
         if (source && TRUSTED_SOURCES.rhr.length && !TRUSTED_SOURCES.rhr.includes(source)) return;
         const val = parseFloat(row['Resting heart rate'] || row['Heart rate']);
         if (!isNaN(val)) { if (!HEALTH.rhr[key] || val < HEALTH.rhr[key]) HEALTH.rhr[key] = val; }
@@ -1259,7 +1259,6 @@ function processRows(rows, type) {
         if (!isNaN(val)) { if (!HEALTH.spo2[key]) HEALTH.spo2[key] = []; HEALTH.spo2[key].push(val); }
 
       } else if (type === 'steps') {
-        // Only Huawei via HealthSync, deduplicate by timestamp
         if (source && !TRUSTED_SOURCES.steps.includes(source)) return;
         const sig = row['Date'] + '|' + row['Time'] + '|' + row['Steps'];
         if (seenSteps.has(sig)) return;
@@ -1272,19 +1271,13 @@ function processRows(rows, type) {
         const stage = (row['Sleep stage']||'').toLowerCase();
         if (!isNaN(secs)) {
           const dt = new Date(row['Date'].replace(/\./g, '-').replace(' ', 'T'));
-          // Stop at backward jump in timestamps = start of 2nd source session
           if (!HEALTH._sleepLastDt) HEALTH._sleepLastDt = dt;
-          if (dt < HEALTH._sleepLastDt) {
-            console.log('SLEEP: backward jump, stopping. Last:', HEALTH._sleepLastDt, 'Current:', dt);
-            return;
-          }
+          if (dt < HEALTH._sleepLastDt) return;
           HEALTH._sleepLastDt = dt;
-          // Deduplicate by timestamp only (same moment = same row)
           const ts = row['Date']+'|'+row['Time'];
           if (!HEALTH._sleepSeen) HEALTH._sleepSeen = new Set();
           if (HEALTH._sleepSeen.has(ts)) return;
           HEALTH._sleepSeen.add(ts);
-          // Assign to night: before 14:00 = previous night
           const hour = dt.getHours();
           let sleepKey = key;
           if (hour < 14) {
@@ -1314,7 +1307,6 @@ function finaliseHealth() {
   });
   Object.keys(HEALTH.sleep).forEach(k => {
     const s = HEALTH.sleep[k];
-    // Total sleep = total minus awake (matches Oura "time asleep" not "time in bed")
     s.total = +Math.max(0, s.total - (s.awake||0)).toFixed(2);
     ['deep','light','rem','awake'].forEach(stage => { if(s[stage]) s[stage] = +s[stage].toFixed(2); });
     delete s._raw;
@@ -1333,10 +1325,8 @@ function getFileType(name) {
   return null;
 }
 
-// Oura API deprecated personal tokens — using CSV data instead
 async function fetchOuraData() {
   // No-op: Oura personal access tokens deprecated Dec 2025
-  // Data comes from Google Drive CSVs
 }
 
 async function fetchAllHealthData() {
@@ -1344,15 +1334,13 @@ async function fetchAllHealthData() {
   try {
     const res = await fetch('https://script.google.com/macros/s/AKfycbzRKq-_fRH5kKfpQe8roHJGfTcKSKpK-ufKyFrn3oi2-sOMYy4--UP9x_vayXWqmo-O2w/exec');
     const data = await res.json();
-    
-    // Process each type
+
     Object.entries(data).forEach(([type, files]) => {
       if (!Array.isArray(files)) return;
       files.forEach(file => {
         if (!file.content) return;
         let rows = parseCSVText(file.content);
         if (type === 'sleep') {
-          // Pre-filter to first session only using a for loop (forEach return won't break)
           const cleanRows = [];
           let lastDt = null;
           const seenTs = new Set();
@@ -1379,7 +1367,6 @@ async function fetchAllHealthData() {
   setText('Building dashboard...');
 }
 
-
 function renderHealth() {
   const rhrVals = Object.values(HEALTH.rhr);
   const spo2Vals = Object.values(HEALTH.spo2);
@@ -1399,7 +1386,6 @@ function renderHealth() {
   const todaySleep = HEALTH.sleep[todayKey];
   const ystdSleep = HEALTH.sleep[ystdKey];
 
-  // Recovery score based on RHR, HRV, SPO2
   const rhrScore = minRHR <= 46 ? 100 : minRHR <= 50 ? 80 : 60;
   const hrvScore = latestHRV >= 40 ? 100 : latestHRV >= 30 ? 70 : 50;
   const spo2Today = HEALTH.spo2[todayKey] || HEALTH.spo2[ystdKey] || 97;
@@ -1409,19 +1395,14 @@ function renderHealth() {
   const recColor = recoveryScore >= 80 ? 'var(--green)' : recoveryScore >= 60 ? 'var(--amber)' : 'var(--red)';
   const recLabel = recoveryScore >= 80 ? 'Well recovered' : recoveryScore >= 60 ? 'Moderate recovery' : 'Under-recovered';
 
-  // Today's readiness advice
   let readinessAdvice = '';
   if (recoveryScore >= 80) readinessAdvice = "Green light for tomorrow's trail run. Body is well recovered. Push at moderate-hard effort.";
   else if (recoveryScore >= 60) readinessAdvice = "Moderate recovery. Tomorrow's 10km trail run is fine — keep effort controlled. Watch HR, stay under Z3.";
   else readinessAdvice = "Body signals fatigue. Tomorrow run easy — treat it as a reconnaissance, not a workout. Prioritise sleep tonight.";
 
-  // SPO2 alert
   const spo2Alert = spo2Today < 95 ? `⚠️ SPO2 today is ${spo2Today}% — below optimal. Ensure good sleep tonight and don't push hard intensity tomorrow.` : '';
 
-  // Strava workout dates for correlation
   const workoutDates = new Set(allActs.map(a => a.start_date_local.slice(0,10)));
-
-  const labels = days;
 
   $('tab-health').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.5rem;">
@@ -1470,7 +1451,7 @@ function renderHealth() {
     </div>
 
     <div class="card" style="margin-bottom:16px;">
-      <div class="card-title">Sleep breakdown (Jun 4–5)</div>
+      <div class="card-title">Sleep breakdown</div>
       <div style="position:relative;height:180px;"><canvas id="sleepChart"></canvas></div>
     </div>
 
@@ -1481,7 +1462,6 @@ function renderHealth() {
     </div>
   `;
 
-  // RHR chart
   destroyChart('rhr');
   charts.rhr = new Chart($('rhrChart'), {
     type: 'line',
@@ -1497,7 +1477,6 @@ function renderHealth() {
       scales:{...baseScales('','bpm'),y:{...baseScales().y,min:40,max:65}}}
   });
 
-  // SPO2 chart
   destroyChart('spo2');
   charts.spo2 = new Chart($('spo2Chart'), {
     type: 'line',
@@ -1515,7 +1494,6 @@ function renderHealth() {
         x:{ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont,maxRotation:45,autoSkip:true,maxTicksLimit:8},grid:{color:CHART_DEFAULTS.gridColor}}}}
   });
 
-  // HRV chart
   destroyChart('hrv');
   const hrvDays = Object.keys(HEALTH.hrv);
   charts.hrv = new Chart($('hrvChart'), {
@@ -1532,7 +1510,6 @@ function renderHealth() {
       scales:{...baseScales('','ms'),y:{...baseScales().y,min:0}}}
   });
 
-  // Steps chart
   destroyChart('steps');
   const stepsDays = Object.keys(HEALTH.steps).sort();
   charts.steps = new Chart($('stepsChart'), {
@@ -1549,7 +1526,6 @@ function renderHealth() {
       scales:{...baseScales(),x:{ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont,maxRotation:45,autoSkip:true,maxTicksLimit:8},grid:{color:CHART_DEFAULTS.gridColor}}}}
   });
 
-  // Sleep chart
   destroyChart('sleep');
   const sleepDays = Object.keys(HEALTH.sleep).sort();
   charts.sleep = new Chart($('sleepChart'), {
@@ -1567,7 +1543,6 @@ function renderHealth() {
       scales:{...baseScales('','hours'),x:{stacked:true,ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont},grid:{color:CHART_DEFAULTS.gridColor}},y:{stacked:true,ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont},grid:{color:CHART_DEFAULTS.gridColor}}}}
   });
 
-  // RHR vs workout correlation
   destroyChart('rhrWorkout');
   charts.rhrWorkout = new Chart($('rhrWorkoutChart'), {
     type: 'bar',
@@ -1583,7 +1558,6 @@ function renderHealth() {
         x:{ticks:{color:CHART_DEFAULTS.color,font:CHART_DEFAULTS.tickFont,maxRotation:45,autoSkip:true,maxTicksLimit:10},grid:{color:CHART_DEFAULTS.gridColor}}}}
   });
 }
-
 </script>
 </body>
 </html>
